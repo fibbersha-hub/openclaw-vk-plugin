@@ -1,0 +1,60 @@
+{
+  "name": "@anthropic-user/openclaw-channel-vk",
+  "version": "1.0.0",
+  "description": "VK (VKontakte) channel plugin for OpenClaw Gateway — full API integration: messaging, wall, market, media, community management",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "channel": {
+      "id": "vk",
+      "label": "VK (VKontakte)",
+      "selectionLabel": "VK",
+      "docsPath": "/channels/vk",
+      "blurb": "Connect OpenClaw to VK via Bot Long Poll API. Full integration: messaging, wall posts, market, media upload, community management.",
+      "order": 80
+    },
+    "install": {
+      "npmSpec": "@anthropic-user/openclaw-channel-vk",
+      "defaultChoice": "npm"
+    }
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "openclaw-channel",
+    "vk",
+    "vkontakte",
+    "bot",
+    "messaging",
+    "market",
+    "social"
+  ],
+  "author": "Chimera RCS",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

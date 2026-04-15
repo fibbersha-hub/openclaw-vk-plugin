@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Secrets — NEVER commit
+API_KEYS.md
+ZNAIKA_KEYS.md
+SYSTEM_SPEC.md
+*.env
+.env.*
+
+# Private tools (contain secrets)
+groq-proxy/
+studio-tools/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
