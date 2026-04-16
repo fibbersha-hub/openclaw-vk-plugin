@@ -1,6 +1,13 @@
-# OpenClaw VK Channel Plugin
+# OpenClaw VK (VKontakte) Channel Plugin
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-channel%20plugin-blueviolet)](https://github.com/openclaw/openclaw)
+[![VK API](https://img.shields.io/badge/VK%20API-120%2B%20methods-blue)](https://dev.vk.com/reference)
+[![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178c6)](https://www.typescriptlang.org/)
 
 Full VK (VKontakte) integration for [OpenClaw](https://github.com/openclaw/openclaw) — the open-source AI agent platform.
+
+> **VK is Russia's largest social network** with 100M+ monthly active users. This plugin brings OpenClaw AI assistants to VK communities — messaging, shops, wall posts, and more.
 
 **The most complete VK plugin for OpenClaw** with 120+ API methods, including messaging, wall posts, market/shop, media upload, stories, polls, statistics, and community management.
 
