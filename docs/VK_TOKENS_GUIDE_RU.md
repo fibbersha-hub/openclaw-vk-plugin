@@ -51,10 +51,11 @@ vk1.a.<token>
 | `photos` | Загрузка изображений |
 | `docs` | Загрузка файлов |
 | `stories` | Публикация stories |
+| `wall` | Публикации на стену от имени сообщества |
 | `app_widget` | Виджеты приложений сообщества |
 | `manage` | Расширенные методы API (статистика, Callback) |
 
-> **Важно о `wall` и `market`:** Эти scope **отсутствуют** в токене сообщества. Публикации на стену доступны через `manage`. Методы VK Market (`market.get`, `market.edit` и др.) требуют отдельного **пользовательского токена** (User Access Token) — см. раздел 3.3.
+> **Важно о `market`:** Этот scope **отсутствует** в токене сообщества. Методы VK Market (`market.get`, `market.edit` и др.) требуют отдельного **пользовательского токена** (User Access Token) — см. раздел 3.3.
 
 ### 3.3 Пользовательский токен (User Access Token) для VK Market
 
@@ -62,7 +63,7 @@ vk1.a.<token>
 
 Для получения пользовательского токена с доступом к Market:
 
-1. Создайте приложение на [vk.com/apps?act=manage](https://vk.com/apps?act=manage)
+1. Создайте **Standalone-приложение** в [Сервисе авторизации VK ID](https://id.vk.com/business/go) (с 10 апреля 2026 года Standalone-приложения создаются только там)
 2. Запросите права `market` (scope: `134217728`) через OAuth Implicit Flow:
    ```
    https://oauth.vk.com/authorize?client_id=ВАШ_APP_ID&display=page
@@ -71,7 +72,7 @@ vk1.a.<token>
    ```
 3. Токен содержится в URL после редиректа: `#access_token=vk1.a...`
 
-> **Важно:** Scope `market` для новых приложений, созданных в Сервисе авторизации VK ID, требует явного одобрения. Напишите запрос на `devsupport@corp.vk.com`, указав ID приложения и сообщества. Подробнее: [dev.vk.com/reference/access-rights](https://dev.vk.com/reference/access-rights).
+> **Важно:** Scope `market` для приложений, созданных в Сервисе авторизации VK ID, требует явного одобрения. Напишите запрос на `devsupport@corp.vk.com`, указав ID приложения и сообщества. Подробнее: [dev.vk.com/reference/access-rights](https://dev.vk.com/reference/access-rights).
 
 ---
 
@@ -140,6 +141,8 @@ vk1.a.<token>
 - **ДОЛЖЕН** быть числом
 - **НЕ ДОЛЖЕН** содержать знак минус
 - **НЕ ДОЛЖЕН** быть коротким именем (screen name)
+
+> **LongID:** ВКонтакте переходит с Int32 на Int64 для всех идентификаторов (user_id, group_id, owner_id). Значения могут превышать 2 147 483 647. Плагин принимает `groupId` как **строку** — это корректный формат, совместимый с Int64.
 
 ### 5.3 Получение
 

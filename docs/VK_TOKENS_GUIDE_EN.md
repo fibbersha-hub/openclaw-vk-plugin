@@ -51,10 +51,11 @@ Optional scopes (per official VK API documentation):
 | `photos` | Upload images |
 | `docs` | Upload files |
 | `stories` | Publish stories |
+| `wall` | Publish posts on behalf of the community |
 | `app_widget` | Community app widgets |
 | `manage` | Extended API access (stats, Callback) |
 
-> **Important — `wall` and `market`:** These scopes are **not available** on community tokens. Wall publishing is accessible via `manage`. VK Market methods (`market.get`, `market.edit`, etc.) require a separate **User Access Token** — see section 3.3.
+> **Important — `market`:** This scope is **not available** on community tokens. VK Market methods (`market.get`, `market.edit`, etc.) require a separate **User Access Token** — see section 3.3.
 
 ### 3.3 User Access Token for VK Market
 
@@ -62,7 +63,7 @@ All `market.*` methods (market.get, market.edit, market.add, etc.) require a **U
 
 To obtain a user token with Market access:
 
-1. Create an application at [vk.com/apps?act=manage](https://vk.com/apps?act=manage)
+1. Create a **Standalone application** in the [VK ID Authorization Service](https://id.vk.com/business/go) (since April 10, 2026, Standalone apps can only be created there)
 2. Request `market` scope (value: `134217728`) via OAuth Implicit Flow:
    ```
    https://oauth.vk.com/authorize?client_id=YOUR_APP_ID&display=page
@@ -140,6 +141,8 @@ Manage → Messages → Bot settings → Allow messages from community
 - **MUST** be numeric
 - **MUST NOT** include a minus sign
 - **MUST NOT** be a screen name (e.g. `my_community`)
+
+> **LongID:** VK is migrating all identifiers (user_id, group_id, owner_id) from Int32 to Int64. Values may exceed 2,147,483,647. The plugin accepts `groupId` as a **string** — this is the correct format, fully compatible with Int64.
 
 ### 5.3 Retrieval
 
