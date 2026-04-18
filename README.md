@@ -262,6 +262,31 @@ src/
 | `autoKeyboard` | boolean | `true` | Auto-parse buttons from text |
 | `groups` | object | `{}` | Per-group chat configurations |
 
+## Documentation
+
+| Document | Language | Description |
+|----------|----------|-------------|
+| [OPENCLAW_VK_PLUGIN_GUIDE.md](docs/OPENCLAW_VK_PLUGIN_GUIDE.md) | RU | Full plugin reference — all 120+ API methods, config, keyboards, formatting, media |
+| [VK_API_COMPLETE_GUIDE.md](docs/VK_API_COMPLETE_GUIDE.md) | RU | VK API v5.199 complete reference (Long Poll, Callback API, Market, upload flow) |
+| [VK_TOKENS_GUIDE_RU.md](docs/VK_TOKENS_GUIDE_RU.md) | RU | Token types, scopes, OAuth, lifecycle |
+| [VK_TOKENS_GUIDE_EN.md](docs/VK_TOKENS_GUIDE_EN.md) | EN | Token types, scopes, OAuth, lifecycle |
+| [ZNAIKA_APP_GUIDE.md](docs/ZNAIKA_APP_GUIDE.md) | RU | Знайка VK Mini App — studio management dashboard |
+
+## Знайка — VK Mini App
+
+This plugin ships with **Знайка** — a private VK Mini App built on top of the plugin, providing a mobile management dashboard for the Ulvar 3D Terrain Studio.
+
+**Capabilities via Знайка:**
+- 23 VK audience analysis commands (group search, portrait, cross-audience, bots, segments)
+- Product catalog management (59 SKUs, SQLite)
+- Ozon Seller API integration (stocks, prices, orders)
+- VK competitor monitoring (`market.get` scanning)
+- Wall publishing and VK Market sync
+
+**Stack:** Python HTTP server + VK Bridge (VK Mini App auth)  
+**Access:** Authorized VK users only  
+**Docs:** [docs/ZNAIKA_APP_GUIDE.md](docs/ZNAIKA_APP_GUIDE.md)
+
 ## Requirements
 
 - OpenClaw v2026.4.x or later
