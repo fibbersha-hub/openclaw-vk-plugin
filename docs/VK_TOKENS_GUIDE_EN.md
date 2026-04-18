@@ -36,7 +36,7 @@ Token format:
 vk1.a.<token>
 ```
 
-### 3.2 Token capabilities
+### 3.2 Community token capabilities
 
 The token **MUST** have the following minimum scope:
 
@@ -44,20 +44,38 @@ The token **MUST** have the following minimum scope:
 |-------|----------|---------|
 | `messages` | ✅ Yes | Receive and send messages |
 
-Optional scopes:
+Optional scopes (per official VK API documentation):
 
 | Scope | Purpose |
 |-------|---------|
 | `photos` | Upload images |
 | `docs` | Upload files |
-| `wall` | Publish posts |
 | `stories` | Publish stories |
-| `market` | VK Market API (`market.get`, `market.add`, `market.edit`) |
+| `app_widget` | Community app widgets |
 | `manage` | Extended API access (stats, Callback) |
 
-> **Note on `market_content`:** Full VK Market functionality (adding/editing items with media) may require the additional `market_content` permission. This is requested separately and requires passing VK's shop moderation.
+> **Important — `wall` and `market`:** These scopes are **not available** on community tokens. Wall publishing is accessible via `manage`. VK Market methods (`market.get`, `market.edit`, etc.) require a separate **User Access Token** — see section 3.3.
 
-### 3.3 Token lifecycle
+### 3.3 User Access Token for VK Market
+
+All `market.*` methods (market.get, market.edit, market.add, etc.) require a **User Access Token** — a community token will not work.
+
+To obtain a user token with Market access:
+
+1. Create an application at [vk.com/apps?act=manage](https://vk.com/apps?act=manage)
+2. Request `market` scope (value: `134217728`) via OAuth Implicit Flow:
+   ```
+   https://oauth.vk.com/authorize?client_id=YOUR_APP_ID&display=page
+     &redirect_uri=https://oauth.vk.com/blank.html
+     &scope=134217728&response_type=token&v=5.199
+   ```
+3. The token is returned in the redirect URL fragment: `#access_token=vk1.a...`
+
+> **Important:** The `market` scope for applications created via VK ID Authorization Service requires explicit approval. Send a request to `devsupport@corp.vk.com` specifying your app ID and community ID. See [dev.vk.com/reference/access-rights](https://dev.vk.com/reference/access-rights).
+
+---
+
+### 3.4 Token lifecycle
 
 The token:
 
@@ -70,6 +88,8 @@ The token:
 > **Important:** The token is displayed only once at creation. It cannot be retrieved later. If lost, generate a new token.
 
 ### 3.4 Security requirements
+
+### 3.5 Security requirements
 
 **MUST:**
 - Store tokens in a secure location (environment variables or secret manager)
@@ -329,7 +349,8 @@ If a token is compromised:
 - Long Poll may lose events under unstable network conditions
 - Callback API requires a publicly accessible HTTPS endpoint
 - VK API behavior may change across versions — test after upgrades
-- Some VK Market operations require additional permissions (`market_content`)
+- VK Market methods are not accessible via community token — a User Access Token with `market` scope is required
+- The `market` scope for new VK ID applications is granted only after approval by VK support (devsupport@corp.vk.com)
 
 ---
 
