@@ -99,6 +99,30 @@ openclaw gateway run --verbose
 
 The bot will connect via Long Poll and start responding to messages.
 
+## Token & Key Setup
+
+The plugin requires two credentials:
+
+| Parameter | Description | Where to get |
+|-----------|-------------|--------------|
+| `token` | VK Community Access Token | Community → Manage → API usage → Create token |
+| `groupId` | Numeric community ID | Community → Manage → API usage → Community ID field |
+
+**Minimum required token scope:** `messages`
+
+**Recommended scope:** `messages`, `photos`, `docs`, `wall`, `stories`, `market`, `manage`
+
+**Verify your token is working:**
+```bash
+curl "https://api.vk.com/method/groups.getById?group_id=YOUR_GROUP_ID&access_token=YOUR_TOKEN&v=5.199"
+```
+
+Expected: `{"response": [{"id": 123456789, ...}]}`  
+Error `error_code: 5` → invalid token, create a new one.  
+Error `error_code: 7` → insufficient permissions, check token scopes.
+
+> Full token setup guide: [docs/VK_TOKENS_GUIDE_EN.md](docs/VK_TOKENS_GUIDE_EN.md) · [RU](docs/VK_TOKENS_GUIDE_RU.md)
+
 ## Features
 
 ### Messaging
