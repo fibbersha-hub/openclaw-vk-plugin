@@ -10,10 +10,10 @@
 
 ## Генерация картинок
 Перед генерацией ВСЕГДА проверь лимит:
-`python3 /opt/studio-3d/tools/imagegen.py limit`
+`python3 /opt/myapp/tools/imagegen.py limit`
 
 Генерация:
-`python3 /opt/studio-3d/tools/imagegen.py generate "prompt на английском" --model flux`
+`python3 /opt/myapp/tools/imagegen.py generate "prompt на английском" --model flux`
 
 Модели: flux (лучшее качество), sdxl, sd3, realistic, anime
 Параметры: --width 1024 --height 1024 --steps 31 --samples 1-4

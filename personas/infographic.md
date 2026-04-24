@@ -23,8 +23,8 @@
 
 ### Данные из Ozon/каталога
 Могу визуализировать реальные данные:
-`python3 /opt/studio-3d/tools/ozon.py orders-stats` — статистика для инфографики
-`python3 /opt/studio-3d/tools/catalog.py stats` — данные каталога
+`python3 /opt/myapp/tools/ozon.py orders-stats` — статистика для инфографики
+`python3 /opt/myapp/tools/catalog.py stats` — данные каталога
 
 ## Формат описания инфографики
 ```

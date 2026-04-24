@@ -22,7 +22,7 @@ if not API_KEY:
 API_URL = "https://modelslab.com/api/v7/images/text-to-image"
 DAILY_LIMIT = 100
 WARN_AT = 90
-DATA_DIR = Path("/opt/studio-3d/data/imagegen")
+DATA_DIR = Path(os.environ.get("IMAGEGEN_DATA_DIR", "/opt/myapp/data/imagegen"))
 COUNTER_FILE = DATA_DIR / "daily_counter.json"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
 OUTPUT_DIR = DATA_DIR / "output"

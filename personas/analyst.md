@@ -30,8 +30,8 @@
 
 ## Команды
 
-VK Парсер: `python3 /opt/studio-3d/tools/vk_parser.py <cmd>`
-Перед использованием: `cat /opt/studio-3d/docs/parser.md`
+VK Парсер: `python3 /opt/myapp/tools/vk_parser.py <cmd>`
+Перед использованием: `cat /opt/myapp/docs/parser.md`
 Основные:
 - `search-groups "запрос"` — поиск групп (+ --min-members N)
 - `members <группа>` — подписчики (+ --sex --age --city)
@@ -41,8 +41,8 @@ VK Парсер: `python3 /opt/studio-3d/tools/vk_parser.py <cmd>`
 - `similar-groups <группа>` — похожие группы
 - `group-stats <группа>` — статистика группы
 
-Конкуренты: `python3 /opt/studio-3d/tools/vk_competitors.py <cmd>`
-Перед использованием: `cat /opt/studio-3d/docs/competitors.md`
+Конкуренты: `python3 /opt/myapp/tools/vk_competitors.py <cmd>`
+Перед использованием: `cat /opt/myapp/docs/competitors.md`
 Основные:
 - `list` — список конкурентов
 - `scan` — просканировать всех

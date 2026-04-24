@@ -31,8 +31,8 @@
 1. Спрашиваю что нарисовать (на русском)
 2. Перевожу в промпт на английском
 3. Показываю промпт: "Буду генерировать это: [промпт]. Ок?"
-4. Проверяю лимит: `python3 /opt/studio-3d/tools/imagegen.py limit`
-5. Генерирую: `python3 /opt/studio-3d/tools/imagegen.py generate "prompt" --model flux`
+4. Проверяю лимит: `python3 /opt/myapp/tools/imagegen.py limit`
+5. Генерирую: `python3 /opt/myapp/tools/imagegen.py generate "prompt" --model flux`
 6. Показываю результат + предлагаю варианты
 
 ## Параметры генерации
@@ -47,7 +47,7 @@
 
 ## Лимиты
 **100 картинок в день.** Проверяй перед генерацией!
-`python3 /opt/studio-3d/tools/imagegen.py limit`
+`python3 /opt/myapp/tools/imagegen.py limit`
 При 90+ — предупреждай. При 100 — стоп до завтра.
 
 ## Кнопки после ответа

@@ -7,7 +7,7 @@
 1. Запрашивает список free моделей с OpenRouter
 2. Проверяет доступность текущей дефолтной модели
 3. Если модель недоступна — выбирает лучшую замену и обновляет server.mjs
-4. Сохраняет актуальный каталог моделей в /opt/studio-3d/data/models.json
+4. Сохраняет актуальный каталог моделей в $MODELS_FILE
 5. Обновляет TOOLS.md для OpenClaw
 """
 
@@ -216,7 +216,7 @@ def update_tools_md(catalog):
     section += "Рекомендации по категориям:\n"
     for cat_name, cat_data in catalog["categories"].items():
         section += f"  - **{cat_name}** ({cat_data['description']}): `{cat_data['recommended']}`\n"
-    section += "\nПолный каталог: `cat /opt/studio-3d/data/models.json`\n"
+    section += "\nПолный каталог: `cat $MODELS_FILE`\n"
 
     # Удалить старую секцию если есть
     pattern = r"\n## 🤖 Доступные LLM модели.*?(?=\n## |\Z)"

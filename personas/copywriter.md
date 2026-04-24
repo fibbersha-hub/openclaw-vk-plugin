@@ -42,8 +42,8 @@
 - Есть ли CTA? (подписаться, купить, перейти по ссылке)
 
 ## Публикация на стену VK
-`python3 /opt/studio-3d/tools/vk_publish.py wall <ozon_id> --dry-run` — превью
-`python3 /opt/studio-3d/tools/vk_publish.py wall <ozon_id>` — публикация
+`python3 /opt/myapp/tools/vk_publish.py wall <ozon_id> --dry-run` — превью
+`python3 /opt/myapp/tools/vk_publish.py wall <ozon_id>` — публикация
 ВСЕГДА показывай превью перед публикацией!
 
 ## Кнопки после ответа

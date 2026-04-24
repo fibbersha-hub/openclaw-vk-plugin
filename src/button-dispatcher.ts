@@ -8,8 +8,9 @@ import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
 
 const execAsync = promisify(exec);
-const TOOLS_DIR = "/opt/studio-3d/scripts";
-const PERSONAS_DIR = "/opt/studio-3d/personas";
+const APP_DIR = process.env.APP_DIR || "/opt/myapp";
+const TOOLS_DIR = `${APP_DIR}/scripts`;
+const PERSONAS_DIR = `${APP_DIR}/personas`;
 const NOTES_DIR = "/opt/openclaw-notes";
 const SAGE_DIR  = "/opt/openclaw-sage";
 const SAGE_PY   = "/opt/browser-bridge/sage.py";
@@ -180,15 +181,15 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: WAREHOUSE_MENU,
   },
   "📋 Все площадки": {
-    script: `cd /opt/studio-3d && python3 scripts/platform_status.py`,
+    script: `cd ${APP_DIR} && python3 scripts/platform_status.py`,
     keyboard: WAREHOUSE_MENU,
   },
   "📉 Кончаются": {
-    script: `cd /opt/studio-3d && python3 scripts/stock_admin.py low`,
+    script: `cd ${APP_DIR} && python3 scripts/stock_admin.py low`,
     keyboard: WAREHOUSE_MENU,
   },
   "🔄 Обновить": {
-    script: `cd /opt/studio-3d && python3 scripts/sync_all_platforms.py`,
+    script: `cd ${APP_DIR} && python3 scripts/sync_all_platforms.py`,
     keyboard: WAREHOUSE_MENU,
   },
   "🔙 Завсклад": {
@@ -202,19 +203,19 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: OZON_MENU,
   },
   "📦 Товары Ozon": {
-    script: `cd /opt/studio-3d && python3 scripts/stock_admin.py list`,
+    script: `cd ${APP_DIR} && python3 scripts/stock_admin.py list`,
     keyboard: OZON_MENU,
   },
   "💰 Цены Ozon": {
-    script: `cd /opt/studio-3d && python3 scripts/show_prices.py`,
+    script: `cd ${APP_DIR} && python3 scripts/show_prices.py`,
     keyboard: OZON_MENU,
   },
   "📊 Остатки Ozon": {
-    script: `cd /opt/studio-3d && python3 scripts/stock_admin.py status`,
+    script: `cd ${APP_DIR} && python3 scripts/stock_admin.py status`,
     keyboard: OZON_MENU,
   },
   "🛒 Заказы Ozon": {
-    script: `cd /opt/studio-3d && python3 scripts/show_orders.py`,
+    script: `cd ${APP_DIR} && python3 scripts/show_orders.py`,
     keyboard: OZON_MENU,
   },
 
@@ -224,11 +225,11 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: VK_MARKET_MENU,
   },
   "📦 Товары VK": {
-    script: `cd /opt/studio-3d && python3 scripts/show_vk_market.py`,
+    script: `cd ${APP_DIR} && python3 scripts/show_vk_market.py`,
     keyboard: VK_MARKET_MENU,
   },
   "🛒 Заказы VK": {
-    script: `cd /opt/studio-3d && python3 scripts/show_vk_orders.py`,
+    script: `cd ${APP_DIR} && python3 scripts/show_vk_orders.py`,
     keyboard: VK_MARKET_MENU,
   },
 
@@ -238,7 +239,7 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: AVITO_MENU,
   },
   "📦 Фид Avito": {
-    script: `cd /opt/studio-3d && python3 scripts/show_avito.py`,
+    script: `cd ${APP_DIR} && python3 scripts/show_avito.py`,
     keyboard: AVITO_MENU,
   },
 
@@ -248,7 +249,7 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: MFM_MENU,
   },
   "📦 Товары СРМ": {
-    script: `cd /opt/studio-3d && python3 scripts/show_mfm.py`,
+    script: `cd ${APP_DIR} && python3 scripts/show_mfm.py`,
     keyboard: MFM_MENU,
   },
 
@@ -258,23 +259,23 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: PUBLISHER_MENU,
   },
   "📤 Все площадки": {
-    script: `cd /opt/studio-3d && python3 scripts/platform_status.py`,
+    script: `cd ${APP_DIR} && python3 scripts/platform_status.py`,
     keyboard: PUBLISHER_MENU,
   },
   "🟠 Ozon цены": {
-    script: `cd /opt/studio-3d && python3 scripts/push_prices_ozon.py`,
+    script: `cd ${APP_DIR} && python3 scripts/push_prices_ozon.py`,
     keyboard: PUBLISHER_MENU,
   },
   "💜 VK публикация": {
-    script: `cd /opt/studio-3d && python3 scripts/push_prices_vk.py`,
+    script: `cd ${APP_DIR} && python3 scripts/push_prices_vk.py`,
     keyboard: PUBLISHER_MENU,
   },
   "🟢 СРМ публикация": {
-    script: `cd /opt/studio-3d && python3 scripts/push_catalog_mfm.py`,
+    script: `cd ${APP_DIR} && python3 scripts/push_catalog_mfm.py`,
     keyboard: PUBLISHER_MENU,
   },
   "📊 Сравнить цены": {
-    script: `cd /opt/studio-3d && python3 scripts/ozon_sync.py stock`,
+    script: `cd ${APP_DIR} && python3 scripts/ozon_sync.py stock`,
     keyboard: PUBLISHER_MENU,
   },
 
@@ -284,11 +285,11 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: PRINT_MENU,
   },
   "📋 Очередь": {
-    script: `cd /opt/studio-3d && python3 scripts/print_queue_cli.py queue`,
+    script: `cd ${APP_DIR} && python3 scripts/print_queue_cli.py queue`,
     keyboard: PRINT_MENU,
   },
   "📊 ABC/XYZ": {
-    script: `cd /opt/studio-3d && python3 scripts/stock_admin.py status`,
+    script: `cd ${APP_DIR} && python3 scripts/stock_admin.py status`,
     keyboard: PRINT_MENU,
   },
   "➕ Добавить в печать": {
@@ -306,15 +307,15 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: ANALYST_MENU,
   },
   "👥 Аудитория": {
-    script: `cd /opt/studio-3d && python3 scripts/vk_parser.py group-stats ulvar_terrane`,
+    script: `cd ${APP_DIR} && python3 scripts/vk_parser.py group-stats ${process.env.VK_GROUP_SCREEN_NAME || "your_vk_group"}`,
     keyboard: ANALYST_MENU,
   },
   "🕵️ Конкуренты": {
-    script: `cd /opt/studio-3d && python3 scripts/vk_competitors.py report`,
+    script: `cd ${APP_DIR} && python3 scripts/vk_competitors.py report`,
     keyboard: ANALYST_MENU,
   },
   "📊 Отчёт": {
-    script: `cd /opt/studio-3d && python3 scripts/vk_competitors.py report`,
+    script: `cd ${APP_DIR} && python3 scripts/vk_competitors.py report`,
     keyboard: ANALYST_MENU,
   },
   "➕ Добавить конкурента": {
@@ -327,7 +328,7 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
         || text.match(/^(\S+)$/);
       if (!m) return null;
       const screenName = m[1].replace(/^@/, "");
-      return `cd /opt/studio-3d && python3 scripts/vk_competitors.py add ${shellEscape(screenName)}`;
+      return `cd ${APP_DIR} && python3 scripts/vk_competitors.py add ${shellEscape(screenName)}`;
     },
     keyboard: ANALYST_MENU,
   },
@@ -341,7 +342,7 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
         .replace(/^(найди\s+групп[ыу]|поищи\s+групп[ыу]|search\s+groups?)\s*/i, "")
         .trim();
       if (!query) return null;
-      return `cd /opt/studio-3d && python3 scripts/vk_parser.py search-groups ${shellEscape(query)}`;
+      return `cd ${APP_DIR} && python3 scripts/vk_parser.py search-groups ${shellEscape(query)}`;
     },
     keyboard: ANALYST_MENU,
   },
@@ -389,15 +390,15 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     ],
   },
   "🔑 Все ключи": {
-    script: `cd /opt/studio-3d && python3 scripts/key_manager.py list`,
+    script: `cd ${APP_DIR} && python3 scripts/key_manager.py list`,
     keyboard: [["🔑 Все ключи", "✅ Проверить"], ["🔄 Заменить ключ", "📊 Лимиты"], ["🔙 Меню"]],
   },
   "✅ Проверить": {
-    script: `cd /opt/studio-3d && python3 scripts/key_manager.py check`,
+    script: `cd ${APP_DIR} && python3 scripts/key_manager.py check`,
     keyboard: [["🔑 Все ключи", "✅ Проверить"], ["🔄 Заменить ключ", "📊 Лимиты"], ["🔙 Меню"]],
   },
   "📊 Лимиты": {
-    script: `cd /opt/studio-3d && python3 scripts/key_manager.py limits`,
+    script: `cd ${APP_DIR} && python3 scripts/key_manager.py limits`,
     keyboard: [["🔑 Все ключи", "✅ Проверить"], ["🔄 Заменить ключ", "📊 Лимиты"], ["🔙 Меню"]],
   },
   "🔄 Заменить ключ": {

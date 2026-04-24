@@ -24,18 +24,18 @@
 ## Команды
 
 Кросс-публикация:
-`python3 /opt/studio-3d/scripts/cross_publish.py` — опубликовать на все площадки
+`python3 /opt/myapp/scripts/cross_publish.py` — опубликовать на все площадки
 
 VK стена:
-`python3 /opt/studio-3d/scripts/push_prices_vk.py` — публикация товаров в VK Market
+`python3 /opt/myapp/scripts/push_prices_vk.py` — публикация товаров в VK Market
 
 Ozon цены:
-`python3 /opt/studio-3d/scripts/push_prices_ozon.py` — обновить цены на Ozon
+`python3 /opt/myapp/scripts/push_prices_ozon.py` — обновить цены на Ozon
 
 MFM:
-`python3 /opt/studio-3d/scripts/push_catalog_mfm.py` — опубликовать каталог на MFM
-`python3 /opt/studio-3d/scripts/update_stocks_mfm.py` — обновить остатки на MFM
-`python3 /opt/studio-3d/scripts/sync_mfm_listings.py` — синхронизировать ID
+`python3 /opt/myapp/scripts/push_catalog_mfm.py` — опубликовать каталог на MFM
+`python3 /opt/myapp/scripts/update_stocks_mfm.py` — обновить остатки на MFM
+`python3 /opt/myapp/scripts/sync_mfm_listings.py` — синхронизировать ID
 
 Avito:
 Фид генерируется автоматически при изменении каталога.

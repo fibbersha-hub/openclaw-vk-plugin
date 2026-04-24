@@ -36,8 +36,8 @@ def now_local() -> datetime:
 NOTES_DB     = os.environ.get("NOTES_DB",     "/opt/openclaw-notes/notes.db")
 REMINDERS_DB = os.environ.get("REMINDERS_DB", "/opt/openclaw-notes/reminders.db")
 TODOS_DB     = os.environ.get("TODOS_DB",     "/opt/openclaw-notes/todos.db")
-OPENCLAW_CFG = "/root/.openclaw/openclaw.json"
-STUDIO_CFG   = "/opt/studio-3d/config/config.env"
+OPENCLAW_CFG = os.environ.get("OPENCLAW_CFG", "/root/.openclaw/openclaw.json")
+STUDIO_CFG   = os.environ.get("STUDIO_CFG", "/opt/myapp/config/config.env")
 CALENDAR_DIR = "/opt/openclaw-notes"
 
 # ── Производственный календарь (isdayoff.ru) ────────────────────────────────
@@ -319,7 +319,7 @@ def get_today_orders() -> str:
 
 # ── Очередь печати ───────────────────────────────────────────────────────────
 
-STUDIO_DIR = "/opt/studio-3d"
+STUDIO_DIR = os.environ.get("APP_DIR", "/opt/myapp")
 
 def get_print_queue() -> str:
     try:

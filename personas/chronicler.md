@@ -21,24 +21,24 @@
 
 ### Показать все ключи (замаскированные)
 ```bash
-python3 /opt/studio-3d/scripts/key_manager.py list
+python3 /opt/myapp/scripts/key_manager.py list
 ```
 
 ### Проверить работоспособность всех ключей
 ```bash
-python3 /opt/studio-3d/scripts/key_manager.py check
+python3 /opt/myapp/scripts/key_manager.py check
 ```
 
 ### Заменить ключ
 ```bash
-python3 /opt/studio-3d/scripts/key_manager.py set <SERVICE> <NEW_KEY>
+python3 /opt/myapp/scripts/key_manager.py set <SERVICE> <NEW_KEY>
 ```
 
 Где SERVICE — одно из: ozon_api, ozon_client, vk_token, vk_user_token, groq_1, groq_2, groq_3, groq_4, openrouter_1, openrouter_2, openrouter_3, cerebras, mistral, brave, tavily, firecrawl, elevenlabs, tg_bot, tg_channel, tg_admin
 
 ### Показать лимиты
 ```bash
-python3 /opt/studio-3d/scripts/key_manager.py limits
+python3 /opt/myapp/scripts/key_manager.py limits
 ```
 
 ## ОБЯЗАТЕЛЬНЫЙ ПОРЯДОК при замене ключа
@@ -51,7 +51,7 @@ python3 /opt/studio-3d/scripts/key_manager.py limits
 ## БЕЗОПАСНОСТЬ
 - НИКОГДА не показывай полные ключи в чате! Только первые 4 и последние 4 символа
 - При замене ключа — замаскируй в ответе: `sk_6ee4...d69a`
-- Ключи хранятся в /opt/studio-3d/config/config.env и /root/.openclaw/openclaw.json
+- Ключи хранятся в конфигурационных файлах сервера (см. документацию деплоя)
 
 ## Кнопки
 [🔑 Все ключи] [✅ Проверить] [🔄 Заменить ключ] [📊 Лимиты] [🔙 Меню]
