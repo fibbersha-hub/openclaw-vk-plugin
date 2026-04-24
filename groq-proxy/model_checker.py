@@ -22,10 +22,13 @@ from pathlib import Path
 import requests
 
 # --- Config ---
-OPENROUTER_KEY = "***OPENROUTER_KEY_REMOVED***"
-PROXY_CONFIG = Path("/opt/groq-proxy/server.mjs")
-MODELS_FILE = Path("/opt/studio-3d/data/models.json")
-TOOLS_MD = Path("/root/.openclaw/workspace/TOOLS.md")
+OPENROUTER_KEY = os.environ.get("OPENROUTER_KEY_1", "")
+if not OPENROUTER_KEY:
+    print("ERROR: OPENROUTER_KEY_1 env var not set", file=sys.stderr)
+    sys.exit(1)
+PROXY_CONFIG = Path(os.environ.get("PROXY_CONFIG", "/opt/groq-proxy/server.mjs"))
+MODELS_FILE  = Path(os.environ.get("MODELS_FILE",  "/opt/openclaw-vk-plugin/data/models.json"))
+TOOLS_MD     = Path(os.environ.get("TOOLS_MD",     "/opt/openclaw-vk-plugin/workspace/TOOLS.md"))
 LOG_FILE = Path("/var/log/model-checker.log")
 
 # Предпочтительные модели (в порядке приоритета)
