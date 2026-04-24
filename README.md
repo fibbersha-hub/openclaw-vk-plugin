@@ -3,6 +3,10 @@
 **AI-powered assistant bot for VK communities.**  
 Query multiple LLMs, generate images, manage notes and reminders — all from VK messages.
 
+> 🇷🇺 **Новичок? Читай сюда:** [docs/GUIDE_FOR_BEGINNERS.md](docs/GUIDE_FOR_BEGINNERS.md)  
+> Полный гайд простым языком — что делает каждая функция, как получить ключи, как установить.  
+> Опыт программирования не нужен.
+
 ---
 
 ## What it does
