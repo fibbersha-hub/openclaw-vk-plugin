@@ -11,8 +11,10 @@
 #   sage.py report_text <session_id>        — export session as text doc
 #   sage.py report_table <session_id>       — export as markdown table
 #   sage.py report_chart <session_id>       — generate consensus chart PNG
-#   sage.py close <session_id>              — archive active session
+#   sage.py close <session_id>             — archive active session
 #   sage.py delete <session_id>             — delete session
+#   sage.py get_mode <peer_id>              — show current mode
+#   sage.py set_mode <peer_id> <auto|multi> — switch mode
 
 import sys
 import os
@@ -23,36 +25,94 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-# ── Server profile ────────────────────────────────────────────
-_bridge_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _bridge_dir)
-try:
-    from server_profile import get_profile
-    _profile    = get_profile(use_available=False)  # use total RAM, not available
-    _TIER       = _profile["tier"]
-    _BATCH_SIZE = _profile["batch_size"]
-    _BATCHES    = _profile["batches"]       # [[llm1,llm2], [llm3,llm4], ...]
-    _ALL_LLMS   = _profile["llms_to_query"] # full list in priority order
-    _AVAIL_MB   = _profile["available_mb"]
-except Exception as _e:
-    _TIER       = "UNKNOWN"
-    _BATCH_SIZE = 6
-    _ALL_LLMS   = ["deepseek", "chatgpt", "claude", "perplexity", "mistral", "qwen"]
-    _BATCHES    = [_ALL_LLMS]
-    _AVAIL_MB   = 0
-
-DB_PATH     = os.environ.get("SAGE_DB_PATH",     "/opt/openclaw-sage/sage.db")
-REPORTS_DIR = os.environ.get("SAGE_REPORTS_DIR", "/opt/openclaw-sage/reports")
-REPORT_GEN  = os.path.join(_bridge_dir, "report-generator.js")
-BRIDGE_URL  = os.environ.get("BRIDGE_URL",       "http://127.0.0.1:7788")
+DB_PATH = "/opt/openclaw-sage/sage.db"
+REPORTS_DIR = "/opt/openclaw-sage/reports"
+REPORT_GEN  = "/opt/browser-bridge/report-generator.js"
+BRIDGE_URL = "http://127.0.0.1:7788"
 CEREBRAS_KEY = os.environ.get("CEREBRAS_KEY", "")
-if not CEREBRAS_KEY:
-    print("ERROR: CEREBRAS_KEY not set. Get free key: https://cloud.cerebras.ai", file=sys.stderr)
-    sys.exit(1)
-CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama3.1-8b")
-
-MAX_CHARS_PER_LLM  = 400
+CEREBRAS_MODEL = "llama3.1-8b"
+MAX_CHARS_PER_LLM = 400
 MAX_SESSIONS_SHOWN = 8
+
+# ── Режимы работы ─────────────────────────────────────────────────────────────
+# auto  — авто-выбор лучшей модели под тип задачи (по умолчанию)
+# multi — несколько моделей одного провайдера (медленнее, дороже по ресурсам)
+
+# Ключевые слова для определения типа задачи
+_TASK_KEYWORDS = {
+    "code": [
+        "код", "скрипт", "функци", "класс", "алгоритм", "программ",
+        "python", "javascript", "typescript", "sql", "bash", "shell",
+        "баг", "ошибк", "debug", "деплой", "deploy", "api", "библиотек",
+        "реализ", "напиши код", "написать функцию", "рефактор",
+    ],
+    "math": [
+        "вычисли", "реши", "уравнение", "математик",
+        "формул", "интеграл", "производн", "матриц", "вектор",
+        "вероятность", "статистик", "расчёт", "посчитай", "докажи теорему",
+    ],
+    "reasoning": [
+        "почему", "объясни логик", "докажи", "аргумент",
+        "парадокс", "противоречие", "умозаключение", "критическ",
+        "проанализируй", "сравни", "оцени преимущества", "выведи",
+    ],
+    "creative": [
+        "напиши рассказ", "придумай", "история", "стихотворение",
+        "сценарий", "текст для", "слоган", "заголовок для поста",
+        "контент", "идеи для", "копирайт",
+    ],
+    "search": [
+        "новости", "сегодня", "актуальн", "последн новост",
+        "что случилось", "кто выиграл", "текущий курс", "свежий",
+        "когда произошло",
+    ],
+}
+
+# Авто-режим: какие LLM (с моделями) лучше для каждого типа задачи
+_AUTO_HINTS = {
+    "code":      ["deepseek:r1", "qwen:coder", "mistral:codestral", "chatgpt", "claude", "perplexity"],
+    "math":      ["deepseek:r1", "qwen:qwq",   "chatgpt",           "mistral", "claude", "perplexity"],
+    "reasoning": ["deepseek:r1", "qwen:qwq",   "chatgpt",           "claude",  "mistral","perplexity"],
+    "creative":  ["chatgpt",     "claude",      "qwen",              "mistral", "deepseek","perplexity"],
+    "search":    ["perplexity",  "chatgpt",     "deepseek",          "qwen",    "claude",  "mistral"],
+    "general":   ["deepseek",    "chatgpt",     "claude",            "perplexity","mistral","qwen"],
+}
+
+# Мульти-режим: все доступные модели у всех провайдеров
+_MULTI_LLMS = [
+    "deepseek",     # V3 — быстрый, общий
+    "deepseek:r1",  # R1 — reasoning, медленнее
+    "chatgpt",      # GPT-4o
+    "qwen",         # Qwen-Max
+    "qwen:qwq",     # QwQ-32B — reasoning
+    "claude",       # Claude Haiku
+    "perplexity",   # Sonar
+    "mistral",      # Mistral Large
+]
+
+# Мульти-режим с учётом типа задачи (оптимизируем порядок)
+_MULTI_HINTS = {
+    "code":      ["deepseek:r1","deepseek","qwen:coder","qwen","mistral:codestral","chatgpt","claude","perplexity"],
+    "math":      ["deepseek:r1","deepseek","qwen:qwq","qwen","chatgpt","mistral","claude","perplexity"],
+    "reasoning": ["deepseek:r1","deepseek","qwen:qwq","qwen","chatgpt","claude","mistral","perplexity"],
+    "creative":  ["chatgpt","claude","qwen","qwen:qwq","mistral","deepseek","deepseek:r1","perplexity"],
+    "search":    ["perplexity","chatgpt","deepseek","deepseek:r1","qwen","claude","mistral","qwen:qwq"],
+    "general":   _MULTI_LLMS,
+}
+
+_TASK_LABELS = {
+    "code":      "код",
+    "math":      "математика",
+    "reasoning": "логика/анализ",
+    "creative":  "творчество",
+    "search":    "поиск/новости",
+    "general":   "общий",
+}
+
+_MODE_LABELS = {
+    "auto":  "🤖 Авто",
+    "multi": "🔬 Мульти",
+}
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -77,9 +137,14 @@ def get_db():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id  TEXT NOT NULL REFERENCES sessions(id),
             question    TEXT NOT NULL,
-            responses   TEXT NOT NULL,  -- JSON: [{llm, text}]
+            responses   TEXT NOT NULL,
             synthesis   TEXT NOT NULL,
             asked_at    TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS peer_settings (
+            peer_id    INTEGER PRIMARY KEY,
+            sage_mode  TEXT NOT NULL DEFAULT 'auto',
+            updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_sessions_peer ON sessions(peer_id, archived, updated_at);
         CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
@@ -95,6 +160,66 @@ def new_id():
 
 def now():
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ── Режим и тип задачи ───────────────────────────────────────────────────────
+
+def get_peer_mode(conn, peer_id):
+    """Получить текущий режим пользователя (auto по умолчанию)."""
+    row = conn.execute(
+        "SELECT sage_mode FROM peer_settings WHERE peer_id=?", (peer_id,)
+    ).fetchone()
+    return row["sage_mode"] if row else "auto"
+
+
+def set_peer_mode(conn, peer_id, mode):
+    """Сохранить режим пользователя."""
+    conn.execute(
+        "INSERT INTO peer_settings (peer_id, sage_mode, updated_at) VALUES (?,?,?) "
+        "ON CONFLICT(peer_id) DO UPDATE SET sage_mode=excluded.sage_mode, updated_at=excluded.updated_at",
+        (peer_id, mode, now())
+    )
+    conn.commit()
+
+
+def detect_task_type(question):
+    """Определить тип задачи по ключевым словам."""
+    q = question.lower()
+    scores = {t: 0 for t in _TASK_KEYWORDS}
+    for task, keywords in _TASK_KEYWORDS.items():
+        for kw in keywords:
+            if kw in q:
+                scores[task] += 1
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "general"
+
+
+def build_llm_list(mode, task_type):
+    """Построить список LLM-спецификаций для запроса.
+
+    auto  — 6 моделей, выбранных под тип задачи
+    multi — 8 моделей, включая несколько моделей одного провайдера
+    """
+    if mode == "multi":
+        return _MULTI_HINTS.get(task_type, _MULTI_LLMS)
+    return _AUTO_HINTS.get(task_type, _AUTO_HINTS["general"])
+
+
+def llm_display_name(spec):
+    """Преобразует 'deepseek:r1' → 'DeepSeek R1', 'chatgpt' → 'ChatGPT' и т.д."""
+    names = {
+        "deepseek": "DeepSeek V3",
+        "deepseek:r1": "DeepSeek R1",
+        "chatgpt": "ChatGPT",
+        "claude": "Claude",
+        "perplexity": "Perplexity",
+        "mistral": "Mistral",
+        "mistral:codestral": "Codestral",
+        "qwen": "Qwen-Max",
+        "qwen:qwq": "QwQ-32B",
+        "qwen:coder": "Qwen-Coder",
+    }
+    return names.get(spec, spec)
 
 
 # ── Bridge HTTP ───────────────────────────────────────────────────────────────
@@ -147,68 +272,50 @@ def truncate(text, max_chars):
 
 # ── Core: ask ─────────────────────────────────────────────────────────────────
 
-def _query_in_batches(question):
-    """
-    Query all LLMs, respecting server RAM limits.
-    If batch_size < total LLMs — queries them in rounds, collects all responses.
-    Returns (all_responses, errors, n_batches_used).
-    """
-    if _TIER == "NANO":
-        return [], ["браузерный мост недоступен (RAM < 1.5 ГБ)"], 0
-
-    batches   = _BATCHES or [_ALL_LLMS]
-    n_batches = len(batches)
-    all_resp  = []
-    errors    = []
-
-    for i, batch in enumerate(batches):
-        if n_batches > 1:
-            print(f"⏳ Раунд {i+1}/{n_batches}: {', '.join(batch)}…", flush=True)
-        try:
-            result = bridge_post("/query-all", {"llms": batch, "message": question})
-            all_resp.extend(result.get("responses", []))
-        except Exception as e:
-            errors.append(f"[раунд {i+1}]: {e}")
-
-    return all_resp, errors, n_batches
-
-
 def cmd_ask(peer_id, question, session_id=None):
     peer_id = int(peer_id)
 
-    # NANO: no browser bridge at all
-    if _TIER == "NANO":
-        print("❌ Недостаточно RAM для браузерного моста.")
-        print(f"   Доступно: {_AVAIL_MB} МБ. Нужно минимум 1 500 МБ.")
-        print("   Используй Groq/OpenRouter прокси (модуль 2).")
-        sys.exit(1)
+    # Определяем режим и тип задачи
+    conn = get_db()
+    mode = get_peer_mode(conn, peer_id)
+    conn.close()
 
-    # Print mode info
-    n_batches = len(_BATCHES)
-    n_llms    = len(_ALL_LLMS)
-    if n_batches == 1:
-        print(f"🧙 Опрашиваю {n_llms} ИИ одновременно…", flush=True)
+    task_type = detect_task_type(question)
+    llm_list  = build_llm_list(mode, task_type)
+
+    mode_label = _MODE_LABELS.get(mode, mode)
+    task_label = _TASK_LABELS.get(task_type, task_type)
+
+    if mode == "multi":
+        print(f"⏳ Мульти-режим активен — опрашиваю {len(llm_list)} моделей. Это займёт 10-15 минут...")
     else:
-        avail_gb = _AVAIL_MB / 1024
-        print(f"🧙 Тир: {_TIER} ({avail_gb:.1f} ГБ). "
-              f"Опрашиваю {n_llms} ИИ в {n_batches} раунда(ов) "
-              f"по {_BATCH_SIZE} за раз…", flush=True)
+        print(f"⏳ Авто-режим: задача «{task_label}» — подбираю лучшие модели...")
 
-    # Query in batches (or all at once if FULL tier)
-    raw_responses, batch_errors, _ = _query_in_batches(question)
+    # Query LLMs via bridge
+    try:
+        result = bridge_post("/query-all", {"llms": llm_list, "message": question})
+        responses = result.get("responses", [])
+    except Exception as e:
+        print(f"❌ Ошибка связи с браузером: {e}")
+        sys.exit(1)
 
     # Collect valid responses
     extracts = []
-    errors   = list(batch_errors)
-    for r in raw_responses:
+    errors = []
+    for r in responses:
+        # display name: bridge returns enhanced name like "DeepSeek (R1)" or use our map
+        raw_llm = r.get("llm", "?")
+        # Find spec from position
+        spec_idx = next((i for i, s in enumerate(llm_list) if s == raw_llm or s.split(":")[0] == raw_llm.lower()), -1)
+        display = llm_display_name(llm_list[spec_idx]) if spec_idx >= 0 else raw_llm
         if r.get("error"):
-            errors.append(f"{r.get('llm','?')}: {r['error'][:60]}")
+            errors.append(f"{display}: недоступен")
             continue
         text = r.get("text", "")
         if len(text) < 10:
-            errors.append(f"{r.get('llm','?')}: пустой ответ")
+            errors.append(f"{display}: пустой ответ")
             continue
-        extracts.append({"llm": r.get("llm","?"), "text": truncate(text, MAX_CHARS_PER_LLM)})
+        extracts.append({"llm": display, "text": truncate(text, MAX_CHARS_PER_LLM)})
 
     if not extracts:
         print("❌ Ни одна модель не ответила. Попробуй позже.")
@@ -233,13 +340,12 @@ def cmd_ask(peer_id, question, session_id=None):
         ])
     except Exception as e:
         synthesis = f"[Синтез недоступен: {e}]\n\n" + "\n\n".join(
-            f"**{e['llm']}:** {e['text']}" for e in extracts
+            f"**{ex['llm']}:** {ex['text']}" for ex in extracts
         )
 
     # Save to DB
     conn = get_db()
     if not session_id:
-        # Create new session
         session_id = new_id()
         title = question[:60] + ("…" if len(question) > 60 else "")
         ts = now()
@@ -258,11 +364,11 @@ def cmd_ask(peer_id, question, session_id=None):
     conn.close()
 
     # Format output
-    ok_llms  = ", ".join(e["llm"] for e in extracts)
+    ok_llms = ", ".join(e["llm"] for e in extracts)
     err_part = f"\n⚠️ Не ответили: {', '.join(errors)}" if errors else ""
-    rounds_note = (f" · {len(_BATCHES)} раунда" if len(_BATCHES) > 1 else "")
     print(f"SESSION_ID:{session_id}")
-    print(f"🧙 Опрошено {len(extracts)}/{len(_ALL_LLMS)} ИИ{rounds_note} ({ok_llms}){err_part}\n")
+    print(f"🧙 Великий Мудрец опросил {len(extracts)} ИИ · {mode_label} · задача: {task_label}")
+    print(f"Опрошены: {ok_llms}{err_part}\n")
     print(f"**Синтез:**\n{synthesis}")
 
 
@@ -504,6 +610,61 @@ def cmd_report_chart(session_id):
         print(f"⚠️ Диаграмма: {e}")
 
 
+# ── Режим ────────────────────────────────────────────────────────────────────
+
+def cmd_get_mode(peer_id):
+    peer_id = int(peer_id)
+    conn = get_db()
+    mode = get_peer_mode(conn, peer_id)
+    conn.close()
+
+    lines = [
+        f"⚙️ **Режим Великого Мудреца:** {_MODE_LABELS.get(mode, mode)}",
+        "",
+        "🤖 **Авто-режим** (сейчас активен)" if mode == "auto" else "🤖 **Авто-режим**",
+        "  Мудрец сам выбирает лучшие модели под твой вопрос.",
+        "  Код → DeepSeek R1 + Qwen-Coder + Codestral",
+        "  Логика → DeepSeek R1 + QwQ-32B",
+        "  Общий → 6 разных моделей",
+        "  Время: 3-7 минут",
+        "",
+        "🔬 **Мульти-режим** (сейчас активен)" if mode == "multi" else "🔬 **Мульти-режим**",
+        "  Опрашивает ВСЕ модели всех провайдеров — в том числе",
+        "  по 2 модели у DeepSeek и Qwen (обычную + reasoning).",
+        "  Даёт более полный ответ, но требует больше времени",
+        "  и ресурсов сервера.",
+        "  Время: 10-15 минут",
+    ]
+    print("\n".join(lines))
+
+
+def cmd_set_mode(peer_id, mode):
+    peer_id = int(peer_id)
+    if mode not in ("auto", "multi"):
+        print(f"❌ Неизвестный режим: {mode}. Доступны: auto, multi")
+        sys.exit(1)
+
+    conn = get_db()
+    set_peer_mode(conn, peer_id, mode)
+    conn.close()
+
+    if mode == "auto":
+        print(
+            "✅ Включён **Авто-режим**\n\n"
+            "Мудрец будет сам выбирать оптимальные модели под каждый вопрос.\n"
+            "Код → DeepSeek R1, логика → QwQ-32B, и т.д.\n"
+            "Время ответа: 3-7 минут."
+        )
+    else:
+        print(
+            "✅ Включён **Мульти-режим**\n\n"
+            "Мудрец будет опрашивать все доступные модели,\n"
+            "включая несколько моделей одного провайдера.\n"
+            "⚠️ Это требует больше времени (10-15 минут)\n"
+            "и больше ресурсов сервера."
+        )
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
@@ -535,6 +696,10 @@ def main():
         cmd_report_table(args[1])
     elif cmd == "report_chart" and len(args) >= 2:
         cmd_report_chart(args[1])
+    elif cmd == "get_mode" and len(args) >= 2:
+        cmd_get_mode(args[1])
+    elif cmd == "set_mode" and len(args) >= 3:
+        cmd_set_mode(args[1], args[2])
     else:
         print(f"Неизвестная команда: {cmd}")
         sys.exit(1)

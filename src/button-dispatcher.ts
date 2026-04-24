@@ -133,11 +133,17 @@ const SAGE_MENU: string[][] = [
   ["🔮 Новый вопрос"],
   ["📚 Мои обсуждения", "🗄️ Архив"],
   ["📄 Отчёт текст", "📊 Отчёт таблица", "📈 График"],
-  ["🔙 Меню"],
+  ["⚙️ Режим Мудреца", "🔙 Меню"],
 ];
 
 const SAGE_REPORT_MENU: string[][] = [
   ["📄 Отчёт текст", "📊 Отчёт таблица", "📈 График"],
+  ["🔙 Великий Мудрец"],
+];
+
+const SAGE_MODE_MENU: string[][] = [
+  ["🤖 Авто-режим (рекомендуется)"],
+  ["🔬 Мульти-режим (все модели, медленнее)"],
   ["🔙 Великий Мудрец"],
 ];
 
@@ -616,6 +622,24 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     keyboard: SAGE_REPORT_MENU,
   },
 
+  "⚙️ Режим Мудреца": {
+    scriptFn: (_text: string, peerId: number): string | null =>
+      `python3 ${SAGE_PY} get_mode ${peerId}`,
+    keyboard: SAGE_MODE_MENU,
+  },
+
+  "🤖 Авто-режим (рекомендуется)": {
+    scriptFn: (_text: string, peerId: number): string | null =>
+      `python3 ${SAGE_PY} set_mode ${peerId} auto`,
+    keyboard: SAGE_MENU,
+  },
+
+  "🔬 Мульти-режим (все модели, медленнее)": {
+    scriptFn: (_text: string, peerId: number): string | null =>
+      `python3 ${SAGE_PY} set_mode ${peerId} multi`,
+    keyboard: SAGE_MENU,
+  },
+
   // Virtual intents for sage
   "sage_ask": {
     scriptFn: (text: string, peerId: number): string | null => {
@@ -763,6 +787,13 @@ const VOICE_INTENTS: VoiceIntent[] = [
   { contains: ["мудрец"],         any: ["спроси", "задай", "вопрос"],            action: "sage_ask" },
   { contains: ["продолжи"],       any: ["обсуждени", "#"],                       action: "sage_resume" },
   { contains: ["вернись"],        any: ["обсуждени", "#"],                       action: "sage_resume" },
+  // --- Режим Мудреца ---
+  { contains: ["режим"],          any: ["мудрец", "sage"],                       action: "⚙️ Режим Мудреца" },
+  { contains: ["авто режим"],     any: [],                                       action: "🤖 Авто-режим (рекомендуется)" },
+  { contains: ["мульти режим"],   any: [],                                       action: "🔬 Мульти-режим (все модели, медленнее)" },
+  { contains: ["включи авто"],    any: ["мудрец", "модел", "режим"],             action: "🤖 Авто-режим (рекомендуется)" },
+  { contains: ["включи мульти"],  any: ["мудрец", "модел", "режим"],             action: "🔬 Мульти-режим (все модели, медленнее)" },
+  { contains: ["все модели"],     any: ["мудрец", "включи", "хочу"],             action: "🔬 Мульти-режим (все модели, медленнее)" },
   { contains: ["из архива"],      any: [],                                       action: "sage_archive_get" },
   { contains: ["закрой обсуждени"],any: [],                                      action: "sage_close" },
   { contains: ["в архив"],        any: ["обсуждени", "отправь"],                 action: "sage_close" },

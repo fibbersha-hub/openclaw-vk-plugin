@@ -82,6 +82,32 @@ const ADAPTERS = {
       '[class*="reasoning"]',
     ],
     enterToSend: true,
+    // Model switching: V3 (default) vs R1 (DeepThink/reasoning)
+    models: {
+      default: { label: 'DeepSeek V3', isDefault: true },
+      r1: {
+        label: 'DeepSeek R1',
+        // Toggle button for DeepThink (R1) mode in input toolbar
+        activateSelectors: [
+          'div[class*="_deepThink_"]',
+          'div[class*="deepThink"]',
+          'button[class*="think"]',
+          'label[class*="think"]',
+          '[data-cy="deep-think-button"]',
+          '[aria-label*="DeepThink" i]',
+          '[aria-label*="R1" i]',
+          // text-based fallback handled in switchToModel
+        ],
+        activateText: 'DeepThink',  // text match fallback
+        // How to detect it's already active
+        activeCheckSelectors: [
+          'div[class*="_deepThink_"][class*="_selected_"]',
+          'div[class*="_deepThink_"][class*="active"]',
+          'div[class*="deepThink"][class*="active"]',
+          'button[class*="think"][class*="active"]',
+        ],
+      },
+    },
   },
 
   gemini: {
@@ -284,7 +310,7 @@ const ADAPTERS = {
       '[class*="qwen"][class*="loading"]',
       '[class*="qwen"][class*="streaming"]',
       '[class*="qwen"][class*="generating"]',
-      'button.stop-btn',                   // Qwen stop button during generation
+      'button.stop-btn',
     ],
     thinkingSelectors: [
       '.qwen-chat-thinking-tool-status-card-wraper',
@@ -292,6 +318,43 @@ const ADAPTERS = {
       '[class*="thinking"]',
     ],
     enterToSend: true,
+    // Model switching via dropdown picker
+    models: {
+      default: { label: 'Qwen-Max', isDefault: true },
+      qwq: {
+        label: 'QwQ-32B',
+        pickerSelectors: [
+          '[class*="model-select"]',
+          '[class*="model-picker"]',
+          '[class*="model-selector"]',
+          'button[class*="model"]',
+          '[data-testid="model-selector"]',
+          '[class*="ModelSelector"]',
+        ],
+        optionSelectors: [
+          '[data-model-id*="qwq"]',
+          '[data-value*="qwq"]',
+          '[data-model*="qwq"]',
+        ],
+        optionText: 'QwQ',
+      },
+      coder: {
+        label: 'Qwen-Coder',
+        pickerSelectors: [
+          '[class*="model-select"]',
+          '[class*="model-picker"]',
+          '[class*="model-selector"]',
+          'button[class*="model"]',
+          '[data-testid="model-selector"]',
+        ],
+        optionSelectors: [
+          '[data-model-id*="coder"]',
+          '[data-value*="coder"]',
+          '[data-model*="coder"]',
+        ],
+        optionText: 'Coder',
+      },
+    },
   },
 
   yandexgpt: {
@@ -322,7 +385,7 @@ const ADAPTERS = {
   },
 
   mistral: {
-    name: 'Mistral Chat',
+    name: 'Mistral',
     url: 'https://chat.mistral.ai',
     inputSelectors: [
       'textarea[placeholder]',
@@ -345,6 +408,26 @@ const ADAPTERS = {
     ],
     thinkingSelectors: [],
     enterToSend: true,
+    // Model switching via dropdown
+    models: {
+      default: { label: 'Mistral Large', isDefault: true },
+      codestral: {
+        label: 'Codestral',
+        pickerSelectors: [
+          '[class*="model-selector"]',
+          '[class*="ModelSelector"]',
+          'button[class*="model"]',
+          '[data-testid="model-selector"]',
+          'select[name*="model"]',
+        ],
+        optionSelectors: [
+          '[data-model*="codestral"]',
+          '[value*="codestral"]',
+          'option[value*="codestral"]',
+        ],
+        optionText: 'Codestral',
+      },
+    },
   },
 };
 
@@ -422,7 +505,112 @@ async function screenshot(page, label) {
 // ============================================================
 // LLM QUERY ENGINE
 // ============================================================
-async function queryLLM(llmKey, message, threadId = null, newThread = false) {
+// ============================================================
+// MODEL SWITCHER — click model selector before sending message
+// Falls back gracefully to default model if switch fails.
+// ============================================================
+async function switchToModel(page, adapter, modelKey) {
+  if (!adapter.models || !modelKey || modelKey === 'default') return;
+  const model = adapter.models[modelKey];
+  if (!model || model.isDefault) return;
+
+  L.info(adapter.name, `Switching to model: ${model.label}`);
+
+  // Strategy A: toggle button (DeepSeek style — a toggle in the input toolbar)
+  if (model.activateSelectors) {
+    // Check if already active
+    if (model.activeCheckSelectors) {
+      for (const sel of model.activeCheckSelectors) {
+        try {
+          const el = await page.$(sel);
+          if (el) {
+            L.info(adapter.name, `Already in ${model.label}`);
+            return;
+          }
+        } catch (_) {}
+      }
+    }
+    // Click toggle button
+    for (const sel of model.activateSelectors) {
+      try {
+        const el = await page.$(sel);
+        if (el) {
+          await el.click();
+          await new Promise(r => setTimeout(r, 600));
+          L.info(adapter.name, `Switched to ${model.label} via toggle`);
+          return;
+        }
+      } catch (_) {}
+    }
+    // Text-based fallback
+    if (model.activateText) {
+      const found = await page.evaluate((text) => {
+        const btns = [...document.querySelectorAll('button, div[role="button"], label')];
+        const match = btns.find(el => el.textContent.trim().includes(text));
+        if (match) { match.click(); return true; }
+        return false;
+      }, model.activateText).catch(() => false);
+      if (found) {
+        await new Promise(r => setTimeout(r, 600));
+        L.info(adapter.name, `Switched to ${model.label} by text match`);
+        return;
+      }
+    }
+  }
+
+  // Strategy B: dropdown picker (Qwen, Mistral style)
+  if (model.pickerSelectors) {
+    let pickerOpened = false;
+    for (const sel of model.pickerSelectors) {
+      try {
+        const picker = await page.$(sel);
+        if (picker) {
+          await picker.click();
+          await new Promise(r => setTimeout(r, 600));
+          pickerOpened = true;
+          break;
+        }
+      } catch (_) {}
+    }
+    if (pickerOpened) {
+      // Try selector-based option
+      if (model.optionSelectors) {
+        for (const optSel of model.optionSelectors) {
+          try {
+            const opt = await page.$(optSel);
+            if (opt) {
+              await opt.click();
+              await new Promise(r => setTimeout(r, 500));
+              L.info(adapter.name, `Switched to ${model.label} via picker`);
+              return;
+            }
+          } catch (_) {}
+        }
+      }
+      // Text-based option fallback
+      if (model.optionText) {
+        const found = await page.evaluate((text) => {
+          const items = [...document.querySelectorAll(
+            'li, [role="option"], [role="menuitem"], div[class*="option"], div[class*="item"]'
+          )];
+          const match = items.find(el => el.textContent.includes(text));
+          if (match) { match.click(); return true; }
+          return false;
+        }, model.optionText).catch(() => false);
+        if (found) {
+          await new Promise(r => setTimeout(r, 500));
+          L.info(adapter.name, `Switched to ${model.label} by text option`);
+          return;
+        }
+      }
+    }
+  }
+
+  L.warn(adapter.name, `Could not switch to ${model.label} — using default model`);
+}
+
+
+async function queryLLM(llmKey, message, threadId = null, newThread = false, modelKey = null) {
   const adapter = ADAPTERS[llmKey];
   if (!adapter) throw new Error(`Unknown LLM: ${llmKey}`);
 
@@ -483,6 +671,13 @@ async function queryLLM(llmKey, message, threadId = null, newThread = false) {
     if (wafHandled) {
       L.info(adapter.name, 'WAF challenge handled, waiting 3s...');
       await sleep(3000);
+    }
+
+    // Switch to requested model (if specified)
+    if (modelKey) {
+      await switchToModel(page, adapter, modelKey).catch(e =>
+        L.warn(adapter.name, `Model switch failed: ${e.message}`)
+      );
     }
 
     // Dump page structure for debugging
@@ -578,7 +773,12 @@ async function queryLLM(llmKey, message, threadId = null, newThread = false) {
     const tInfo = threads.get(tid);
     L.info(adapter.name, `Thread saved: ${tid} → msgs=${tInfo.messageCount}, chars=${tInfo.totalChars}`);
 
-    return { llm: adapter.name, text: response, thread_id: tid };
+    // Build display name: "DeepSeek R1", "Qwen-Coder", etc.
+    const modelInfo = modelKey && adapter.models && adapter.models[modelKey];
+    const displayName = modelInfo && !modelInfo.isDefault
+      ? `${adapter.name} (${modelInfo.label.replace(adapter.name, '').trim() || modelKey})`
+      : adapter.name;
+    return { llm: displayName, text: response, thread_id: tid };
 
   } catch (e) {
     L.error(adapter.name, `Query failed: ${e.message}`);
@@ -1029,12 +1229,17 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(400);
           return res.end(JSON.stringify({ error: 'llms[] and message required' }));
         }
+        // Parse "llm:model" format — e.g. "deepseek:r1", "qwen:coder", "deepseek" (default)
+        const specs = llms.map(spec => {
+          const [llmKey, modelKey = null] = spec.split(':');
+          return { spec, llmKey, modelKey };
+        });
         // Run in parallel
         const results = await Promise.allSettled(
-          llms.map(llm => queryLLM(llm, message))
+          specs.map(({ llmKey, modelKey }) => queryLLM(llmKey, message, null, false, modelKey))
         );
         const responses = results.map((r, i) => ({
-          llm: llms[i],
+          llm: specs[i].spec,
           ...(r.status === 'fulfilled' ? r.value : { error: r.reason.message }),
         }));
         res.writeHead(200);
