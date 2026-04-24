@@ -1,0 +1,69 @@
+{
+  "id": "vk",
+  "channels": ["vk"],
+  "label": "VK (VKontakte)",
+  "version": "1.0.0",
+  "description": "Full VK integration for OpenClaw: messaging, wall posts, market/shop, media upload, stories, community management, polls, likes, widgets",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable/disable VK channel"
+      },
+      "accounts": {
+        "type": "object",
+        "description": "VK community accounts (supports multiple communities)",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "description": "VK Community Bot API token (from dev.vk.com -> community -> manage -> API)"
+            },
+            "groupId": {
+              "type": "string",
+              "description": "VK Community (Group) ID (numeric)"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "dmPolicy": {
+              "type": "string",
+              "enum": ["open", "pairing", "closed", "allowlist", "disabled"],
+              "default": "pairing",
+              "description": "Who can message the bot: open=anyone, pairing=approve first, allowlist=only listed IDs"
+            },
+            "allowFrom": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Allowed VK user IDs (used with allowlist/pairing policies)"
+            },
+            "apiVersion": {
+              "type": "string",
+              "default": "5.199",
+              "description": "VK API version"
+            },
+            "longPollWait": {
+              "type": "number",
+              "default": 25,
+              "description": "Long Poll wait timeout in seconds (1-90)"
+            },
+            "groqApiKey": {
+              "type": "string",
+              "description": "Groq API key for voice message transcription via Whisper (free tier: ~2h/day)"
+            },
+            "transcribeVoice": {
+              "type": "boolean",
+              "default": true,
+              "description": "Automatically transcribe incoming voice messages (requires groqApiKey)"
+            }
+          },
+          "required": ["token", "groupId"]
+        }
+      }
+    }
+  }
+}

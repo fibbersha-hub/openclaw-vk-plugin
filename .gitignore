@@ -1,0 +1,58 @@
+# ── Secrets (NEVER commit) ──────────────────────────────────
+.env
+*.env
+.env.*
+!.env.example
+
+# API keys files
+API_KEYS.md
+ZNAIKA_KEYS.md
+*_KEYS.md
+*_secrets.*
+
+# ── Build output ─────────────────────────────────────────────
+dist/
+build/
+
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.cache/
+
+# ── Runtime data ─────────────────────────────────────────────
+# Sage sessions and reports (user data, not source code)
+/opt/
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated reports
+reports/
+*.report.html
+*.report.pdf
+
+# Browser sessions (contain auth cookies — NEVER commit)
+browser-sessions/
+chromium-sessions/
+*.session
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS / Editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/
+*.swp
+*~
+
+# ── Claude internal files ────────────────────────────────────
+.claude/
+CLAUDE.md
+JOURNAL.md
+AGENTS.md
+AGENTS.server.md

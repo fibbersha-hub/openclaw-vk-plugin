@@ -1,0 +1,13 @@
+[Unit]
+Description=Groq API Key Rotator Proxy for OpenClaw
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/groq-proxy/server.mjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
