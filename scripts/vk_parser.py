@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-vk_parser.py — VK-аналитика для бота Ульвар.
+vk_parser.py — VK-аналитика.
 
 Команды:
   group-stats <screen_name>             — статистика группы (участники, посты, товары)
   audience    <screen_name> [--limit N] — демография аудитории (user token)
   search-groups <query> [--limit N]     — поиск групп по теме
 
-Токены берутся из /opt/studio-3d/config/config.env:
+Токены берутся из переменных окружения или openclaw.json:
   VK_USER_TOKEN        — user token (для demographics, search)
   VK_ACCESS_TOKEN      — community token (fallback)
 """
@@ -22,7 +22,7 @@ import urllib.parse
 from pathlib import Path
 from datetime import datetime
 
-CONFIG_ENV    = Path("/opt/studio-3d/config/config.env")
+CONFIG_ENV    = Path(os.environ.get("OPENCLAW_CONFIG", "/opt/openclaw-vk-plugin/.env"))
 OPENCLAW_JSON = Path("/root/.openclaw/openclaw.json")
 VK_API = "https://api.vk.com/method"
 VK_V = "5.199"
@@ -34,7 +34,7 @@ VK_V = "5.199"
 
 def load_config() -> dict:
     cfg = {}
-    # 1. config.env (studio-3d)
+    # 1. .env file
     if CONFIG_ENV.exists():
         for line in CONFIG_ENV.read_text(encoding="utf-8").splitlines():
             line = line.strip()
