@@ -1,40 +1,82 @@
-Ulvar Noncommercial Attribution License v1.0
+Ulvar Open Source License v2.0
 Copyright (c) 2026 Ulvar Studio
 https://github.com/fibbersha-hub/openclaw-vk-plugin
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to use,
-copy, modify, and merge the Software, subject to the following conditions:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+УСЛОВИЯ ИСПОЛЬЗОВАНИЯ (Russian / English below)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. ATTRIBUTION
-   Any distribution, publication, or public deployment of the Software or any
-   derivative work must include a clear and visible credit to the original
-   source:
+1. ЛИЧНОЕ ИСПОЛЬЗОВАНИЕ — СВОБОДНО
+   Вы можете использовать, копировать, изменять и запускать
+   данное программное обеспечение для личных, некоммерческих
+   целей без каких-либо ограничений.
+
+2. БЕСПЛАТНЫЕ И OPEN-SOURCE ПРОЕКТЫ — СВОБОДНО С УКАЗАНИЕМ ИСТОЧНИКА
+   Вы можете использовать данное ПО как основу для бесплатных
+   проектов при обязательном выполнении следующего условия:
+
+   В README, документации или другом видном месте проекта
+   должно присутствовать указание:
+
+       На основе openclaw-vk-plugin by Ulvar Studio
+       https://github.com/fibbersha-hub/openclaw-vk-plugin
+
+   Производные проекты должны распространяться на условиях
+   этой же лицензии.
+
+3. КОММЕРЧЕСКИЕ ПРОЕКТЫ — ТОЛЬКО ПО СОГЛАСОВАНИЮ
+   Использование данного ПО, его частей или производных работ
+   в коммерческих целях требует предварительного письменного
+   согласования с автором.
+
+   Коммерческим считается любое использование, при котором:
+   - ПО продаётся или входит в состав платного продукта/сервиса
+   - ПО используется для прямого или косвенного извлечения дохода
+   - ПО разворачивается в инфраструктуре коммерческой организации
+     для нужд этой организации
+
+   Для получения коммерческой лицензии свяжитесь с автором:
+   https://github.com/fibbersha-hub
+
+4. БЕЗ ГАРАНТИЙ
+   ПО предоставляется «как есть», без каких-либо гарантий.
+   Авторы не несут ответственности за любой ущерб, возникший
+   в результате использования данного ПО.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TERMS OF USE (English)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. PERSONAL USE — FREE
+   You may use, copy, modify, and run this software for personal,
+   non-commercial purposes without any restrictions.
+
+2. FREE & OPEN-SOURCE PROJECTS — FREE WITH ATTRIBUTION
+   You may use this software as a foundation for free projects,
+   provided that you include a clear and visible credit in your
+   README, documentation, or other prominent location:
 
        Based on openclaw-vk-plugin by Ulvar Studio
        https://github.com/fibbersha-hub/openclaw-vk-plugin
 
-   This credit must appear in the README, documentation, or other prominent
-   location accompanying the distributed work.
+   Derivative works must be distributed under this same license.
 
-2. NONCOMMERCIAL USE ONLY
-   The Software may not be used, in whole or in part, for commercial purposes.
-   Commercial purposes include, but are not limited to:
-   - selling the Software or derivative works
-   - offering the Software as part of a paid product or service
-   - using the Software to generate direct revenue
+3. COMMERCIAL PROJECTS — REQUIRES PRIOR AGREEMENT
+   Using this software, its components, or derivative works for
+   commercial purposes requires prior written permission from
+   the author.
 
-   For commercial licensing, contact the copyright holder.
+   Commercial use includes, but is not limited to:
+   - Selling the software or including it in a paid product/service
+   - Using the software to generate direct or indirect revenue
+   - Deploying the software within a commercial organization
+     for that organization's business purposes
 
-3. SHARE-ALIKE
-   Any derivative works or modifications that are publicly distributed must
-   be released under this same license.
+   To obtain a commercial license, contact the author:
+   https://github.com/fibbersha-hub
 
 4. NO WARRANTY
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-   IN THE SOFTWARE.
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
+   ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF
+   THIS SOFTWARE.
