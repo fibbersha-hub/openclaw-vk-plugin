@@ -23,37 +23,35 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-# ── Server profile (auto-detect available LLMs based on RAM) ──
+# ── Server profile ────────────────────────────────────────────
 _bridge_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _bridge_dir)
 try:
-    from server_profile import get_runtime_limit
-    _profile = get_runtime_limit()
-    _AUTO_LLMS   = _profile["active_llms"]
-    _TIER        = _profile["tier"]
-    _SKIPPED     = _profile["skipped_llms"]
-    _AVAIL_MB    = _profile["available_mb"]
+    from server_profile import get_profile
+    _profile    = get_profile(use_available=False)  # use total RAM, not available
+    _TIER       = _profile["tier"]
+    _BATCH_SIZE = _profile["batch_size"]
+    _BATCHES    = _profile["batches"]       # [[llm1,llm2], [llm3,llm4], ...]
+    _ALL_LLMS   = _profile["llms_to_query"] # full list in priority order
+    _AVAIL_MB   = _profile["available_mb"]
 except Exception as _e:
-    _AUTO_LLMS = ["deepseek", "chatgpt", "perplexity", "claude", "mistral", "qwen"]
-    _TIER = "UNKNOWN"
-    _SKIPPED = []
-    _AVAIL_MB = 0
+    _TIER       = "UNKNOWN"
+    _BATCH_SIZE = 6
+    _ALL_LLMS   = ["deepseek", "chatgpt", "claude", "perplexity", "mistral", "qwen"]
+    _BATCHES    = [_ALL_LLMS]
+    _AVAIL_MB   = 0
 
-DB_PATH = os.environ.get("SAGE_DB_PATH", "/opt/openclaw-sage/sage.db")
+DB_PATH     = os.environ.get("SAGE_DB_PATH",     "/opt/openclaw-sage/sage.db")
 REPORTS_DIR = os.environ.get("SAGE_REPORTS_DIR", "/opt/openclaw-sage/reports")
 REPORT_GEN  = os.path.join(_bridge_dir, "report-generator.js")
-BRIDGE_URL = os.environ.get("BRIDGE_URL", "http://127.0.0.1:7788")
+BRIDGE_URL  = os.environ.get("BRIDGE_URL",       "http://127.0.0.1:7788")
 CEREBRAS_KEY = os.environ.get("CEREBRAS_KEY", "")
 if not CEREBRAS_KEY:
-    print("ERROR: CEREBRAS_KEY env var not set. Get free key at https://cloud.cerebras.ai", file=sys.stderr)
+    print("ERROR: CEREBRAS_KEY not set. Get free key: https://cloud.cerebras.ai", file=sys.stderr)
     sys.exit(1)
 CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama3.1-8b")
 
-# Active LLMs: env override → server profile → fallback
-_env_llms = os.environ.get("SAGE_LLMS", "")
-ACTIVE_LLMS = [l.strip() for l in _env_llms.split(",") if l.strip()] if _env_llms else _AUTO_LLMS
-
-MAX_CHARS_PER_LLM = 400
+MAX_CHARS_PER_LLM  = 400
 MAX_SESSIONS_SHOWN = 8
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -149,41 +147,68 @@ def truncate(text, max_chars):
 
 # ── Core: ask ─────────────────────────────────────────────────────────────────
 
+def _query_in_batches(question):
+    """
+    Query all LLMs, respecting server RAM limits.
+    If batch_size < total LLMs — queries them in rounds, collects all responses.
+    Returns (all_responses, errors, n_batches_used).
+    """
+    if _TIER == "NANO":
+        return [], ["браузерный мост недоступен (RAM < 1.5 ГБ)"], 0
+
+    batches   = _BATCHES or [_ALL_LLMS]
+    n_batches = len(batches)
+    all_resp  = []
+    errors    = []
+
+    for i, batch in enumerate(batches):
+        if n_batches > 1:
+            print(f"⏳ Раунд {i+1}/{n_batches}: {', '.join(batch)}…", flush=True)
+        try:
+            result = bridge_post("/query-all", {"llms": batch, "message": question})
+            all_resp.extend(result.get("responses", []))
+        except Exception as e:
+            errors.append(f"[раунд {i+1}]: {e}")
+
+    return all_resp, errors, n_batches
+
+
 def cmd_ask(peer_id, question, session_id=None):
     peer_id = int(peer_id)
 
-    # Warn user if server profile limited available LLMs
-    if _SKIPPED:
-        avail_gb = _AVAIL_MB / 1024
-        print(f"⚡ Тир сервера: {_TIER} ({avail_gb:.1f} ГБ доступно)")
-        print(f"🤖 Опрашиваю: {', '.join(ACTIVE_LLMS)}")
-        print(f"⏭ Пропущены (мало RAM): {', '.join(_SKIPPED)}")
-    elif _TIER == "NANO":
+    # NANO: no browser bridge at all
+    if _TIER == "NANO":
         print("❌ Недостаточно RAM для браузерного моста.")
         print(f"   Доступно: {_AVAIL_MB} МБ. Нужно минимум 1 500 МБ.")
-        print("   Используй прокси (Groq/OpenRouter) вместо браузерного режима.")
+        print("   Используй Groq/OpenRouter прокси (модуль 2).")
         sys.exit(1)
 
-    # Query all available LLMs in parallel via bridge
-    try:
-        result = bridge_post("/query-all", {"llms": ACTIVE_LLMS, "message": question})
-        responses = result.get("responses", [])
-    except Exception as e:
-        print(f"❌ Ошибка связи с браузером: {e}")
-        sys.exit(1)
+    # Print mode info
+    n_batches = len(_BATCHES)
+    n_llms    = len(_ALL_LLMS)
+    if n_batches == 1:
+        print(f"🧙 Опрашиваю {n_llms} ИИ одновременно…", flush=True)
+    else:
+        avail_gb = _AVAIL_MB / 1024
+        print(f"🧙 Тир: {_TIER} ({avail_gb:.1f} ГБ). "
+              f"Опрашиваю {n_llms} ИИ в {n_batches} раунда(ов) "
+              f"по {_BATCH_SIZE} за раз…", flush=True)
+
+    # Query in batches (or all at once if FULL tier)
+    raw_responses, batch_errors, _ = _query_in_batches(question)
 
     # Collect valid responses
     extracts = []
-    errors = []
-    for r in responses:
+    errors   = list(batch_errors)
+    for r in raw_responses:
         if r.get("error"):
-            errors.append(f"{r.get('llm','?')}: недоступен")
+            errors.append(f"{r.get('llm','?')}: {r['error'][:60]}")
             continue
         text = r.get("text", "")
         if len(text) < 10:
             errors.append(f"{r.get('llm','?')}: пустой ответ")
             continue
-        extracts.append({"llm": r.get("llm", "?"), "text": truncate(text, MAX_CHARS_PER_LLM)})
+        extracts.append({"llm": r.get("llm","?"), "text": truncate(text, MAX_CHARS_PER_LLM)})
 
     if not extracts:
         print("❌ Ни одна модель не ответила. Попробуй позже.")
@@ -233,10 +258,11 @@ def cmd_ask(peer_id, question, session_id=None):
     conn.close()
 
     # Format output
-    ok_llms = ", ".join(e["llm"] for e in extracts)
+    ok_llms  = ", ".join(e["llm"] for e in extracts)
     err_part = f"\n⚠️ Не ответили: {', '.join(errors)}" if errors else ""
+    rounds_note = (f" · {len(_BATCHES)} раунда" if len(_BATCHES) > 1 else "")
     print(f"SESSION_ID:{session_id}")
-    print(f"🧙 Великий Мудрец опросил {len(extracts)} ИИ ({ok_llms}){err_part}\n")
+    print(f"🧙 Опрошено {len(extracts)}/{len(_ALL_LLMS)} ИИ{rounds_note} ({ok_llms}){err_part}\n")
     print(f"**Синтез:**\n{synthesis}")
 
 

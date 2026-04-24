@@ -1,151 +1,141 @@
 #!/usr/bin/env python3
 """
 OpenClaw Server Profile Detector
-Reads /proc/meminfo and /proc/cpuinfo, determines system tier,
-returns recommended LLM list and limits for Великий Мудрец.
+Reads /proc/meminfo, determines batch_size for concurrent LLM queries.
 
-Tiers:
-  NANO    < 1.5 GB RAM   — no browser sessions, proxy only
-  MICRO   1.5–3 GB RAM   — 2 LLMs (DeepSeek + ChatGPT)
-  BASIC   3–5 GB RAM     — 3 LLMs (DeepSeek + ChatGPT + Claude)
-  STANDARD 5–7 GB RAM   — 5 LLMs (all except Qwen)
-  FULL    7+ GB RAM      — all 6 LLMs
+Key concept: ALL 6 LLMs are always queried — just in batches when RAM is limited.
+  batch_size = how many LLMs can be queried simultaneously without OOM risk.
 
-Each Chromium session with a loaded LLM page ≈ 550–650 MB RSS.
-OS + Node.js bridge + VK bot ≈ 1.2 GB baseline.
+Tiers (based on total RAM):
+  NANO     < 1.5 GB  — no browser bridge possible (Chromium won't fit)
+  MICRO    1.5–3 GB  — batch_size=1  (one LLM at a time, 6 rounds)
+  BASIC    3–5 GB    — batch_size=2  (2 LLMs per round, 3 rounds)
+  STANDARD 5–7 GB    — batch_size=3  (3 LLMs per round, 2 rounds)
+  FULL     7+ GB     — batch_size=6  (all at once, 1 round)
+
+Each active Chromium query peak ≈ 550–650 MB RSS (measured on live server).
+OS + Node.js bridge + VK bot ≈ 1 200 MB baseline.
 """
 
 import os
 import sys
 import json
 
-# ── LLM priority order (best quality → fallback) ─────────────
-LLM_PRIORITY = [
-    "deepseek",    # ~550 MB — free, very capable, fast
-    "chatgpt",     # ~600 MB — best general knowledge
-    "claude",      # ~580 MB — best reasoning
-    "perplexity",  # ~520 MB — best for current events
-    "mistral",     # ~500 MB — fast, good code
-    "qwen",        # ~520 MB — good multilingual
+# ── All LLMs in priority order ────────────────────────────────
+ALL_LLMS = [
+    "deepseek",    # ~550 MB peak — fast, capable, free
+    "chatgpt",     # ~600 MB peak — best general knowledge
+    "claude",      # ~580 MB peak — best reasoning
+    "perplexity",  # ~520 MB peak — best for current events/news
+    "mistral",     # ~500 MB peak — fast, good at code
+    "qwen",        # ~520 MB peak — good multilingual
 ]
 
-MB_PER_SESSION  = 600   # conservative estimate per Chromium session
-MB_OS_BASELINE  = 1200  # OS + Node.js + VK bot + groq-proxy
+MB_PER_ACTIVE_QUERY = 600  # extra RAM per concurrent LLM query (conservative)
+MB_OS_BASELINE      = 1200 # OS + Node.js bridge + VK bot + idle sessions
 
 TIERS = {
-    "NANO":     {"ram_min": 0,    "ram_max": 1500,  "max_llms": 0, "label": "Nano (≤1.5 GB)"},
-    "MICRO":    {"ram_min": 1500, "ram_max": 3000,  "max_llms": 2, "label": "Micro (1.5–3 GB)"},
-    "BASIC":    {"ram_min": 3000, "ram_max": 5000,  "max_llms": 3, "label": "Basic (3–5 GB)"},
-    "STANDARD": {"ram_min": 5000, "ram_max": 7000,  "max_llms": 5, "label": "Standard (5–7 GB)"},
-    "FULL":     {"ram_min": 7000, "ram_max": 999999,"max_llms": 6, "label": "Full (7+ GB)"},
+    # name:  (ram_min_mb, ram_max_mb, batch_size, label)
+    "NANO":     (0,    1500,  0, "Nano — только прокси (Groq/OpenRouter)"),
+    "MICRO":    (1500, 3000,  1, "Micro — по одному (6 раундов)"),
+    "BASIC":    (3000, 5000,  2, "Basic — по 2 (3 раунда)"),
+    "STANDARD": (5000, 7000,  3, "Standard — по 3 (2 раунда)"),
+    "FULL":     (7000, 99999, 6, "Full — все сразу (1 раунд)"),
 }
 
 
 def read_meminfo():
-    """Returns dict of key→kB from /proc/meminfo."""
     info = {}
-    with open("/proc/meminfo") as f:
-        for line in f:
-            parts = line.split()
-            if len(parts) >= 2:
-                key = parts[0].rstrip(":")
-                info[key] = int(parts[1])
-    return info
-
-
-def read_cpuinfo():
-    """Returns number of logical CPU cores."""
     try:
-        return os.cpu_count() or 1
-    except Exception:
-        return 1
+        with open("/proc/meminfo") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    info[parts[0].rstrip(":")] = int(parts[1])
+    except FileNotFoundError:
+        pass  # non-Linux (Windows dev machine) — return empty
+    return info
 
 
 def get_profile(use_available=False):
     """
-    Returns a dict with full server profile.
-    use_available=True  → tier based on currently free RAM (runtime check)
-    use_available=False → tier based on total RAM (install-time check)
+    Returns full server profile dict.
+    use_available=True  → batch_size based on currently free RAM
+    use_available=False → batch_size based on total RAM (install-time)
     """
-    mem = read_meminfo()
-    total_mb    = mem.get("MemTotal", 0) // 1024
-    available_mb = mem.get("MemAvailable", 0) // 1024
-    free_mb     = mem.get("MemFree", 0) // 1024
-    cached_mb   = mem.get("Cached", 0) // 1024
-    cpu_cores   = read_cpuinfo()
+    mem       = read_meminfo()
+    total_mb  = mem.get("MemTotal",    0) // 1024
+    avail_mb  = mem.get("MemAvailable",0) // 1024
+    cpu_cores = os.cpu_count() or 1
 
-    check_mb = available_mb if use_available else total_mb
+    check_mb = avail_mb if use_available else total_mb
 
     # Determine tier
     tier_key = "NANO"
-    for key, t in TIERS.items():
-        if t["ram_min"] <= check_mb < t["ram_max"]:
+    for key, (rmin, rmax, _, _) in TIERS.items():
+        if rmin <= check_mb < rmax:
             tier_key = key
             break
 
-    tier = TIERS[tier_key]
-    max_llms = tier["max_llms"]
+    _, _, batch_size, tier_label = TIERS[tier_key]
 
-    # Effective LLM list (top N by priority)
-    active_llms = LLM_PRIORITY[:max_llms]
-
-    # Usable headroom: how many MORE sessions could fit
-    usable_for_sessions = max(0, available_mb - MB_OS_BASELINE)
-    headroom_sessions   = usable_for_sessions // MB_PER_SESSION
-
-    return {
-        "tier":           tier_key,
-        "tier_label":     tier["label"],
-        "total_mb":       total_mb,
-        "available_mb":   available_mb,
-        "cpu_cores":      cpu_cores,
-        "max_llms":       max_llms,
-        "active_llms":    active_llms,
-        "skipped_llms":   LLM_PRIORITY[max_llms:],
-        "headroom_sessions": headroom_sessions,
-        "check_mode":     "available" if use_available else "total",
-    }
-
-
-def get_runtime_limit():
-    """
-    Runtime check: how many LLMs can we safely query RIGHT NOW
-    given current available memory.
-    Returns list of LLM names to query.
-    """
-    profile = get_profile(use_available=True)
-
-    # If env var overrides max_llms — respect it
-    env_max = os.environ.get("SAGE_MAX_LLMS")
-    if env_max:
+    # Env override: SAGE_BATCH_SIZE or SAGE_MAX_LLMS (legacy)
+    env_batch = os.environ.get("SAGE_BATCH_SIZE") or os.environ.get("SAGE_MAX_LLMS")
+    if env_batch:
         try:
-            env_max = int(env_max)
-            profile["max_llms"]    = min(env_max, len(LLM_PRIORITY))
-            profile["active_llms"] = LLM_PRIORITY[:profile["max_llms"]]
-            profile["skipped_llms"] = LLM_PRIORITY[profile["max_llms"]:]
+            batch_size = max(0, min(int(env_batch), len(ALL_LLMS)))
         except ValueError:
             pass
 
-    return profile
+    # Env override: SAGE_LLMS — explicit list overrides everything
+    env_llms = os.environ.get("SAGE_LLMS", "")
+    if env_llms:
+        llms_override = [l.strip() for l in env_llms.split(",") if l.strip()]
+        llms_to_query = llms_override
+        batch_size = len(llms_to_query) if batch_size == 0 else batch_size
+    else:
+        llms_to_query = list(ALL_LLMS)
+
+    # Build batches
+    batches = []
+    if batch_size > 0:
+        batches = [llms_to_query[i:i+batch_size]
+                   for i in range(0, len(llms_to_query), batch_size)]
+
+    return {
+        "tier":         tier_key,
+        "tier_label":   tier_label,
+        "total_mb":     total_mb,
+        "available_mb": avail_mb,
+        "cpu_cores":    cpu_cores,
+        "batch_size":   batch_size,
+        "llms_to_query":llms_to_query,
+        "batches":      batches,
+        "n_batches":    len(batches),
+        "check_mode":   "available" if use_available else "total",
+    }
 
 
 def print_profile():
-    """Pretty-print profile for installer/diagnostics."""
     p = get_profile(use_available=False)
-    print(f"\n{'═'*50}")
+    n = len(p["llms_to_query"])
+    bs = p["batch_size"]
+    nb = p["n_batches"]
+    print(f"\n{'═'*52}")
     print(f"  OpenClaw Server Profile")
-    print(f"{'═'*50}")
-    print(f"  Tier:      {p['tier']} — {p['tier_label']}")
-    print(f"  RAM:       {p['total_mb']} MB total / {p['available_mb']} MB available")
-    print(f"  CPU:       {p['cpu_cores']} core(s)")
-    print(f"  Max LLMs:  {p['max_llms']} of {len(LLM_PRIORITY)}")
-    if p["active_llms"]:
-        print(f"  Active:    {', '.join(p['active_llms'])}")
+    print(f"{'═'*52}")
+    print(f"  Тир:     {p['tier']} — {p['tier_label']}")
+    print(f"  RAM:     {p['total_mb']} MB total / {p['available_mb']} MB available")
+    print(f"  CPU:     {p['cpu_cores']} ядер")
+    if bs == 0:
+        print(f"  Режим:   браузерный мост недоступен (нужно ≥1.5 ГБ)")
+    elif bs >= n:
+        print(f"  Режим:   все {n} LLM одновременно (1 раунд)")
     else:
-        print(f"  Active:    none (browser bridge not recommended)")
-    if p["skipped_llms"]:
-        print(f"  Skipped:   {', '.join(p['skipped_llms'])} (not enough RAM)")
-    print(f"{'═'*50}\n")
+        print(f"  Режим:   очередь — {bs} LLM за раз, {nb} раунд(а)")
+        for i, batch in enumerate(p["batches"], 1):
+            print(f"    Раунд {i}: {', '.join(batch)}")
+    print(f"{'═'*52}\n")
 
 
 if __name__ == "__main__":
