@@ -23,16 +23,36 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-DB_PATH = "/opt/openclaw-sage/sage.db"
-REPORTS_DIR = "/opt/openclaw-sage/reports"
-REPORT_GEN  = "/opt/browser-bridge/report-generator.js"
-BRIDGE_URL = "http://127.0.0.1:7788"
+# ── Server profile (auto-detect available LLMs based on RAM) ──
+_bridge_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _bridge_dir)
+try:
+    from server_profile import get_runtime_limit
+    _profile = get_runtime_limit()
+    _AUTO_LLMS   = _profile["active_llms"]
+    _TIER        = _profile["tier"]
+    _SKIPPED     = _profile["skipped_llms"]
+    _AVAIL_MB    = _profile["available_mb"]
+except Exception as _e:
+    _AUTO_LLMS = ["deepseek", "chatgpt", "perplexity", "claude", "mistral", "qwen"]
+    _TIER = "UNKNOWN"
+    _SKIPPED = []
+    _AVAIL_MB = 0
+
+DB_PATH = os.environ.get("SAGE_DB_PATH", "/opt/openclaw-sage/sage.db")
+REPORTS_DIR = os.environ.get("SAGE_REPORTS_DIR", "/opt/openclaw-sage/reports")
+REPORT_GEN  = os.path.join(_bridge_dir, "report-generator.js")
+BRIDGE_URL = os.environ.get("BRIDGE_URL", "http://127.0.0.1:7788")
 CEREBRAS_KEY = os.environ.get("CEREBRAS_KEY", "")
 if not CEREBRAS_KEY:
     print("ERROR: CEREBRAS_KEY env var not set. Get free key at https://cloud.cerebras.ai", file=sys.stderr)
     sys.exit(1)
-CEREBRAS_MODEL = "llama3.1-8b"
-ACTIVE_LLMS = ["deepseek", "chatgpt", "perplexity", "claude", "mistral", "qwen"]
+CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama3.1-8b")
+
+# Active LLMs: env override → server profile → fallback
+_env_llms = os.environ.get("SAGE_LLMS", "")
+ACTIVE_LLMS = [l.strip() for l in _env_llms.split(",") if l.strip()] if _env_llms else _AUTO_LLMS
+
 MAX_CHARS_PER_LLM = 400
 MAX_SESSIONS_SHOWN = 8
 
@@ -132,7 +152,19 @@ def truncate(text, max_chars):
 def cmd_ask(peer_id, question, session_id=None):
     peer_id = int(peer_id)
 
-    # Query all LLMs in parallel via bridge
+    # Warn user if server profile limited available LLMs
+    if _SKIPPED:
+        avail_gb = _AVAIL_MB / 1024
+        print(f"⚡ Тир сервера: {_TIER} ({avail_gb:.1f} ГБ доступно)")
+        print(f"🤖 Опрашиваю: {', '.join(ACTIVE_LLMS)}")
+        print(f"⏭ Пропущены (мало RAM): {', '.join(_SKIPPED)}")
+    elif _TIER == "NANO":
+        print("❌ Недостаточно RAM для браузерного моста.")
+        print(f"   Доступно: {_AVAIL_MB} МБ. Нужно минимум 1 500 МБ.")
+        print("   Используй прокси (Groq/OpenRouter) вместо браузерного режима.")
+        sys.exit(1)
+
+    # Query all available LLMs in parallel via bridge
     try:
         result = bridge_post("/query-all", {"llms": ACTIVE_LLMS, "message": question})
         responses = result.get("responses", [])
