@@ -106,13 +106,15 @@ _TASK_KEYWORDS = {
 }
 
 # Авто-режим: какие LLM (с моделями) лучше для каждого типа задачи
+# perplexity временно исключён — сессия разлогинилась (2026-04-25)
+# Авто-режим: 3 модели под тип задачи (один батч = 60-90s, укладывается в таймаут)
 _AUTO_HINTS = {
-    "code":      ["deepseek:r1", "qwen:coder", "mistral:codestral", "chatgpt", "claude", "perplexity"],
-    "math":      ["deepseek:r1", "qwen:qwq",   "chatgpt",           "mistral", "claude", "perplexity"],
-    "reasoning": ["deepseek:r1", "qwen:qwq",   "chatgpt",           "claude",  "mistral","perplexity"],
-    "creative":  ["chatgpt",     "claude",      "qwen",              "mistral", "deepseek","perplexity"],
-    "search":    ["perplexity",  "chatgpt",     "deepseek",          "qwen",    "claude",  "mistral"],
-    "general":   ["deepseek",    "chatgpt",     "claude",            "perplexity","mistral","qwen"],
+    "code":      ["deepseek:r1", "qwen:coder",  "chatgpt"],
+    "math":      ["deepseek:r1", "qwen:qwq",    "chatgpt"],
+    "reasoning": ["deepseek:r1", "claude",      "chatgpt"],
+    "creative":  ["chatgpt",     "claude",       "qwen"],
+    "search":    ["chatgpt",     "deepseek",     "claude"],
+    "general":   ["deepseek",    "chatgpt",      "claude"],
 }
 
 # Мульти-режим: все доступные модели у всех провайдеров

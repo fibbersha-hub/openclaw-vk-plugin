@@ -12,6 +12,22 @@ const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
 const { humanMouseMove, humanType, humanIdle, handleWAFChallenge, rnd, rndFloat, sleep: humanSleep } = require('./human-emulator');
+// ── Concurrency limiter (max N tasks in parallel) ─────────────────────────────
+const QUERY_CONCURRENCY = 3; // max parallel LLMs — prevents CDP overload
+async function pLimit(taskFns, concurrency) {
+  const results = new Array(taskFns.length);
+  let next = 0;
+  async function worker() {
+    while (next < taskFns.length) {
+      const i = next++;
+      try { results[i] = { status: 'fulfilled', value: await taskFns[i]() }; }
+      catch (e) { results[i] = { status: 'rejected', reason: e }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, taskFns.length) }, worker));
+  return results;
+}
+
 
 const CDP_PORT = 9222;
 const BRIDGE_PORT = 7788;
@@ -1234,9 +1250,10 @@ const server = http.createServer(async (req, res) => {
           const [llmKey, modelKey = null] = spec.split(':');
           return { spec, llmKey, modelKey };
         });
-        // Run in parallel
-        const results = await Promise.allSettled(
-          specs.map(({ llmKey, modelKey }) => queryLLM(llmKey, message, null, false, modelKey))
+        // Run with concurrency limit (max QUERY_CONCURRENCY parallel tabs)
+        const results = await pLimit(
+          specs.map(({ llmKey, modelKey }) => () => queryLLM(llmKey, message, null, false, modelKey)),
+          QUERY_CONCURRENCY
         );
         const responses = results.map((r, i) => ({
           llm: specs[i].spec,
