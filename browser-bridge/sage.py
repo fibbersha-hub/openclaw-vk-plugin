@@ -244,6 +244,38 @@ def build_llm_list(mode, task_type):
     return _AUTO_HINTS.get(task_type, _AUTO_HINTS["general"])
 
 
+
+def get_bridge_llm_status():
+    """Fetch disabled LLM dict from bridge health tracker."""
+    try:
+        req = urllib.request.Request(f"{BRIDGE_URL}/llm-status", method="GET",
+                                     headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            return json.loads(r.read())
+    except Exception:
+        return {}
+
+
+def filter_available_llms(llm_list):
+    """Remove disabled LLMs from list.
+    Falls back to any non-disabled LLM if all preferred are disabled."""
+    status = get_bridge_llm_status()
+    if not status:
+        return llm_list
+    disabled = {k for k, v in status.items() if v.get("disabled")}
+    if not disabled:
+        return llm_list
+    available = [spec for spec in llm_list if spec.split(":")[0] not in disabled]
+    if not available:
+        fallbacks = ["deepseek", "chatgpt", "claude", "qwen", "mistral",
+                     "deepseek:r1", "perplexity", "qwen:qwq"]
+        available = [spec for spec in fallbacks if spec.split(":")[0] not in disabled]
+    skipped = [spec for spec in llm_list if spec not in available]
+    if skipped:
+        print(f"⚠️ Пропущены (временно отключены): {', '.join(skipped)}")
+    return available or llm_list
+
+
 def llm_display_name(spec):
     """Преобразует 'deepseek:r1' → 'DeepSeek R1', 'chatgpt' → 'ChatGPT' и т.д."""
     names = {
@@ -445,6 +477,7 @@ def cmd_ask(peer_id, question, session_id=None, file_url=None, file_name=None):
 
     task_type = detect_task_type(question)  # определяем тип по вопросу, не по файлу
     llm_list  = build_llm_list(mode, task_type)
+    llm_list  = filter_available_llms(llm_list)  # skip temporarily disabled
 
     mode_label = _MODE_LABELS.get(mode, mode)
     task_label = _TASK_LABELS.get(task_type, task_type)

@@ -11,6 +11,14 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
+const health = require('./llm-health');
+// Load VK credentials for notifications
+try {
+  const cfg = JSON.parse(require('fs').readFileSync('/root/.openclaw/openclaw.json','utf8'));
+  const vkToken = cfg?.plugins?.entries?.vk?.config?.accounts?.default?.token;
+  const vkUserId = '460657784'; // owner
+  if (vkToken) health.setVKCredentials(vkToken, vkUserId);
+} catch(_) {}
 const { humanMouseMove, humanType, humanIdle, handleWAFChallenge, rnd, rndFloat, sleep: humanSleep } = require('./human-emulator');
 // ── Concurrency limiter (max N tasks in parallel) ─────────────────────────────
 const QUERY_CONCURRENCY = 3; // max parallel LLMs — prevents CDP overload
@@ -794,11 +802,26 @@ async function queryLLM(llmKey, message, threadId = null, newThread = false, mod
     const displayName = modelInfo && !modelInfo.isDefault
       ? `${adapter.name} (${modelInfo.label.replace(adapter.name, '').trim() || modelKey})`
       : adapter.name;
+    health.trackSuccess(llmKey);
     return { llm: displayName, text: response, thread_id: tid };
 
   } catch (e) {
     L.error(adapter.name, `Query failed: ${e.message}`);
     await screenshot(page, `${llmKey}-error`).catch(() => {});
+    // Track failure + detect known patterns
+    const curUrl = (() => { try { return page.url(); } catch(_) { return ''; } })();
+    const { newlyDisabled, pattern } = health.trackFailure(llmKey, e.message, curUrl);
+    if (newlyDisabled && pattern) {
+      const autoStr = pattern.manual
+        ? 'Нужно ручное восстановление.'
+        : `Авто-восстановление через ${Math.round(pattern.disableMs/60000)} мин.`;
+      const msg = `⚠️ Великий Мудрец: ${adapter.name} отключён
+Причина: ${pattern.reason}
+Статус: ${pattern.label}
+${autoStr}`;
+      health.sendVKNotify(msg, `disable_${llmKey}`);
+      L.warn(adapter.name, `DISABLED: ${pattern.label} — ${pattern.reason}`);
+    }
     throw e;
   } finally {
     await page.close().catch(() => {});
@@ -1250,21 +1273,58 @@ const server = http.createServer(async (req, res) => {
           const [llmKey, modelKey = null] = spec.split(':');
           return { spec, llmKey, modelKey };
         });
+        // Filter disabled LLMs before running
+        const enabledSpecs = specs.filter(({llmKey}) => {
+          if (health.isDisabled(llmKey)) {
+            L.warn('health', );
+            return false;
+          }
+          return true;
+        });
+        if (enabledSpecs.length === 0) {
+          res.writeHead(200);
+          return res.end(JSON.stringify({ responses: specs.map(s => ({llm:s.spec, error:'LLM temporarily disabled'})), warning: 'All requested LLMs are disabled' }));
+        }
         // Run with concurrency limit (max QUERY_CONCURRENCY parallel tabs)
         const results = await pLimit(
           specs.map(({ llmKey, modelKey }) => () => queryLLM(llmKey, message, null, false, modelKey)),
           QUERY_CONCURRENCY
         );
-        const responses = results.map((r, i) => ({
-          llm: specs[i].spec,
-          ...(r.status === 'fulfilled' ? r.value : { error: r.reason.message }),
-        }));
+        // Merge results: enabled specs get actual results, disabled specs get error
+        const resultMap = new Map(enabledSpecs.map((s, i) => [s.spec, results[i]]));
+        const responses = specs.map(s => {
+          if (!resultMap.has(s.spec)) return { llm: s.spec, error: 'disabled: ' + (health.getStatus()[s.llmKey]?.reason || 'unknown') };
+          const r = resultMap.get(s.spec);
+          return { llm: s.spec, ...(r.status === 'fulfilled' ? r.value : { error: r.reason.message }) };
+        });
         res.writeHead(200);
         res.end(JSON.stringify({ responses }));
       } catch (e) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: e.message }));
       }
+    });
+    return;
+  }
+
+  // LLM health status
+  if (req.method === 'GET' && req.url === '/llm-status') {
+    res.writeHead(200);
+    return res.end(JSON.stringify(health.getStatus()));
+  }
+
+  // Manual LLM re-enable: POST /llm-reset  body: {llm:'chatgpt'}
+  if (req.method === 'POST' && req.url === '/llm-reset') {
+    let body = ''; req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { llm } = JSON.parse(body);
+        if (!llm) { res.writeHead(400); return res.end(JSON.stringify({error:'llm required'})); }
+        health.resetLLM(llm);
+        L.info('health', 'Manual reset: ' + llm + ' re-enabled');
+        health.sendVKNotify('✅ Великий Мудрец: ' + llm + ' восстановлен вручную', 'reset_' + llm);
+        res.writeHead(200); res.end(JSON.stringify({ok:true,llm}));
+      } catch(e) { res.writeHead(500); res.end(JSON.stringify({error:e.message})); }
     });
     return;
   }
