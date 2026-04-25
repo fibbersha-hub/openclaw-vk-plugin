@@ -16,8 +16,9 @@ const health = require('./llm-health');
 try {
   const cfg = JSON.parse(require('fs').readFileSync('/root/.openclaw/openclaw.json','utf8'));
   const vkToken = cfg?.plugins?.entries?.vk?.config?.accounts?.default?.token;
-  const vkUserId = '460657784'; // owner
-  if (vkToken) health.setVKCredentials(vkToken, vkUserId);
+  // Read owner ID from allowFrom[0] — first allowed user is the owner
+  const vkUserId = cfg?.plugins?.entries?.vk?.config?.accounts?.default?.allowFrom?.[0] || '';
+  if (vkToken && vkUserId) health.setVKCredentials(vkToken, vkUserId);
 } catch(_) {}
 const { humanMouseMove, humanType, humanIdle, handleWAFChallenge, rnd, rndFloat, sleep: humanSleep } = require('./human-emulator');
 // ── Concurrency limiter (max N tasks in parallel) ─────────────────────────────

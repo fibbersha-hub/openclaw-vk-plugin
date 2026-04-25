@@ -467,7 +467,7 @@
 | groq-4 | gsk_XXXX...XXXX | llama-3.3-70b-versatile |
 | cerebras | csk-****...*** | qwen-3-235b-a22b-instruct-2507, llama3.1-8b |
 | mistral | dtIi...IWWN | mistral-small-latest, pixtral-12b, codestral |
-| openrouter | sk-or-v1...f6b2 | 24 free-модели (arcee trinity, gemma-3, llama-3.3, nvidia nemotron, qwen3-coder и др.) |
+| openrouter | sk-or-v1-**** | 24 free-модели (arcee trinity, gemma-3, llama-3.3, nvidia nemotron, qwen3-coder и др.) |
 
 ### Статистика GitHub (данные за 15–19 апреля)
 - **131 клонирование**, 76 уникальных пользователей

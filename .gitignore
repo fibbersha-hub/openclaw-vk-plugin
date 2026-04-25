@@ -9,6 +9,11 @@ API_KEYS.md
 ZNAIKA_KEYS.md
 *_KEYS.md
 *_secrets.*
+*.pem
+*.key
+*.p12
+config.env
+*.env.local
 
 # ── Build output ─────────────────────────────────────────────
 dist/

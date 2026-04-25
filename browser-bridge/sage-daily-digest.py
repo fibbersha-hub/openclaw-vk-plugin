@@ -13,11 +13,16 @@ Sage Daily Digest — ежедневная сводка для Любы.
 import json, os, sys, subprocess, urllib.request, urllib.parse, psycopg2
 from datetime import datetime, timedelta
 
-DIGEST_RECIPIENT_ID = '27733429'      # Люба
-OWNER_ID            = '460657784'     # Андрей (копия)
+DIGEST_RECIPIENT_ID = os.getenv('DIGEST_RECIPIENT_ID', '')   # VK user ID получателя дайджеста
+OWNER_ID            = os.getenv('DIGEST_OWNER_ID', '')        # VK user ID владельца (копия)
 OPENCLAW_CFG        = '/root/.openclaw/openclaw.json'
-STUDIO_DB = dict(host='127.0.0.1', port=5432, dbname='studio_db',
-                 user='studio_app', password='UlvarStudio2026Secure')
+STUDIO_DB = dict(
+    host=os.getenv('STUDIO_DB_HOST', '127.0.0.1'),
+    port=int(os.getenv('STUDIO_DB_PORT', '5432')),
+    dbname=os.getenv('STUDIO_DB_NAME', 'studio_db'),
+    user=os.getenv('STUDIO_DB_USER', 'studio_app'),
+    password=os.getenv('STUDIO_DB_PASSWORD', ''),   # задаётся через config.env
+)
 BRIDGE_URL          = 'http://127.0.0.1:7788'
 SAGE_DB_PATH        = '/root/.sage/sage.db'
 UPDATE_STOCKS_SCRIPT= '/opt/studio-3d/scripts/update_stocks_mfm.py'
@@ -217,7 +222,7 @@ def main(test_mode=False):
     print()
 
     if test_mode:
-        log("TEST MODE: отправляем только владельцу (460657784)")
+        log(f"TEST MODE: отправляем только владельцу ({OWNER_ID})")
         send_vk(OWNER_ID, "[TEST] " + message)
     else:
         log("Отправляем Любе...")
