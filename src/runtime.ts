@@ -15,7 +15,7 @@ import { markdownToVk, chunkText } from "./formatter.js";
 import { extractButtons } from "./keyboard.js";
 import { extractMedia, buildMediaDescription } from "./media.js";
 import { getGroupConfig } from "./accounts.js";
-import { dispatchButton, buildSimpleKeyboard } from "./button-dispatcher.js";
+import { dispatchButton, buildSimpleKeyboard, buildLinkKeyboard, type IncomingDoc } from "./button-dispatcher.js";
 
 const execAsync = promisify(exec);
 import type {
@@ -301,9 +301,17 @@ export class VkLongPollRuntime {
       // =====================================================================
       // Button dispatcher — intercept buttons BEFORE LLM
       // =====================================================================
-      if (!media.length) {  // Only for text-only messages (not photos)
+      // Allow through if: no media, OR only a single document (for sage file analysis)
+      const docAttachment = media.find(m => m.type === "document");
+      const hasOnlyDoc = media.length === 1 && !!docAttachment;
+      const hasNonDocMedia = media.some(m => m.type !== "document");
+
+      if (!hasNonDocMedia) {  // text-only OR text+doc (but not photos/videos)
+        const incomingDoc: IncomingDoc | undefined = docAttachment
+          ? { url: docAttachment.url, filename: docAttachment.filename, ext: docAttachment.filename?.split(".").pop() }
+          : undefined;
         try {
-          const dispatch = await dispatchButton(body, this.log.bind(this), this.getGroqKeys(), msg.peer_id);
+          const dispatch = await dispatchButton(body, this.log.bind(this), this.getGroqKeys(), msg.peer_id, incomingDoc);
 
           if (dispatch.handled) {
             // Handled by dispatcher — send response directly, skip LLM
@@ -316,9 +324,11 @@ export class VkLongPollRuntime {
             }
 
             const responseText = dispatch.text || "";
-            const keyboardJson = dispatch.keyboard
-              ? buildSimpleKeyboard(dispatch.keyboard)
-              : undefined;
+            const keyboardJson = dispatch.linkKeyboard
+              ? buildLinkKeyboard(dispatch.linkKeyboard)
+              : dispatch.keyboard
+                ? buildSimpleKeyboard(dispatch.keyboard)
+                : undefined;
 
             if (responseText) {
               const chunks = chunkText(responseText);
@@ -367,6 +377,23 @@ export class VkLongPollRuntime {
         const users = await this.api.usersGet({ user_ids: String(userId) });
         if (users[0]) displayName = `${users[0].first_name} ${users[0].last_name}`;
       } catch { /* ignore */ }
+
+      // If there's a document attachment going to the LLM agent — inject file content into body
+      if (docAttachment?.url) {
+        try {
+          const nameArg = docAttachment.filename ? ` ${JSON.stringify(docAttachment.filename)}` : "";
+          const { stdout: fileText } = await execAsync(
+            `python3 /opt/browser-bridge/sage.py get_file_text ${JSON.stringify(docAttachment.url)}${nameArg}`,
+            { timeout: 20_000 }
+          );
+          if (fileText.trim()) {
+            this.log(`[doc] injected ${fileText.length} chars into LLM body`);
+            body = body ? `${body}\n\n${fileText.trim()}` : fileText.trim();
+          }
+        } catch (e: any) {
+          this.log(`[doc] file injection failed: ${e.message}`);
+        }
+      }
 
       // SECURITY: Truncate body to max LLM size (vuln #8 — context flooding)
       const truncatedBody = body.length > MAX_BODY_TO_LLM

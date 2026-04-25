@@ -1,0 +1,15 @@
+[Unit]
+Description=Великий Мудрец Mini App API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/sage-miniapp
+ExecStart=/usr/bin/python3 /opt/sage-miniapp/sage_api.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

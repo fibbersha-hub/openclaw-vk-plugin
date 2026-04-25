@@ -16,6 +16,7 @@ const SAGE_DIR  = "/opt/openclaw-sage";
 const SAGE_PY   = "/opt/browser-bridge/sage.py";
 const EXEC_TIMEOUT = 30_000;
 const SAGE_TIMEOUT = 660_000; // 11 min — bridge query-all can take ~5-7 min
+const MINIAPP_URL = process.env.MINIAPP_URL || "https://YOUR_DOMAIN/mudrets/";
 
 // In-memory map: peerId → active sage session_id (cleared on new question / menu)
 const sageActiveSessions = new Map<number, string>();
@@ -35,7 +36,8 @@ interface ButtonAction {
   imageFn?: (text: string) => string | null;  // Returns image generation prompt for Pollinations.ai
   persona?: string;          // Persona file to load (for LLM modes)
   response?: string;         // Static response text
-  keyboard?: string[][];     // Next keyboard buttons
+  keyboard?: string[][];     // Next keyboard buttons (text buttons)
+  linkKeyboard?: Array<{ label: string; url?: string; app_id?: number; owner_id?: number; hash?: string }>;  // Link or app buttons
   passToLLM?: boolean;       // Pass to LLM instead of exec
 }
 
@@ -559,29 +561,18 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
   // =========================================================================
 
   "🧙 Великий Мудрец": {
-    response: [
-      "🧙 **Великий Мудрец** на связи.",
-      "",
-      "Я опрошу 6 разных ИИ одновременно и дам тебе синтез их ответов.",
-      "",
-      "Просто напиши свой вопрос — я передам его всем моделям.",
-      "Или выбери действие:",
-    ].join("\n"),
-    keyboard: SAGE_MENU,
+    response: "🧙 Открывай мини-приложение — задавай вопросы, смотри историю:",
+    linkKeyboard: [{ label: "🧙 Открыть Великого Мудреца", app_id: parseInt(process.env.VK_MINIAPP_ID || "0"), owner_id: -parseInt(process.env.VK_GROUP_ID || "0") }],
   },
 
   "🔙 Великий Мудрец": {
     response: "🧙 Великий Мудрец:",
-    keyboard: SAGE_MENU,
+    linkKeyboard: [{ label: "🧙 Открыть Великого Мудреца", app_id: parseInt(process.env.VK_MINIAPP_ID || "0"), owner_id: -parseInt(process.env.VK_GROUP_ID || "0") }],
   },
 
   "🔮 Новый вопрос": {
-    response: [
-      "🔮 Задай вопрос — Великий Мудрец опросит все ИИ и даст синтез.",
-      "",
-      "⏳ Это займёт 3-7 минут.",
-    ].join("\n"),
-    keyboard: SAGE_MENU,
+    response: "🔮 Открывай мини-приложение и задавай вопрос:",
+    linkKeyboard: [{ label: "🧙 Открыть Великого Мудреца", app_id: parseInt(process.env.VK_MINIAPP_ID || "0"), owner_id: -parseInt(process.env.VK_GROUP_ID || "0") }],
   },
 
   "📚 Мои обсуждения": {
@@ -643,18 +634,8 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
 
   // Virtual intents for sage
   "sage_ask": {
-    scriptFn: (text: string, peerId: number): string | null => {
-      const question = text
-        .replace(/^(спроси|спросить|задай вопрос|вопрос мудрецу|мудрец|великий мудрец)[:\s]*/i, "")
-        .trim();
-      if (!question) return null;
-      const sid = sageActiveSessions.get(peerId);
-      const cmd = sid
-        ? `python3 ${SAGE_PY} ask ${peerId} ${shellEscape(question)} ${sid}`
-        : `python3 ${SAGE_PY} ask ${peerId} ${shellEscape(question)}`;
-      return cmd;
-    },
-    keyboard: SAGE_MENU,
+    response: "🧙 Открывай мини-приложение — там задашь вопрос удобнее:",
+    linkKeyboard: [{ label: "🧙 Открыть Великого Мудреца", app_id: parseInt(process.env.VK_MINIAPP_ID || "0"), owner_id: -parseInt(process.env.VK_GROUP_ID || "0") }],
   },
 
   "sage_resume": {
@@ -1010,10 +991,32 @@ function scanAllScriptIntents(text: string): ScriptMatch[] {
 export interface DispatchResult {
   handled: boolean;        // true = we handled it, don't pass to LLM
   text?: string;           // Response text
-  keyboard?: string[][];   // Keyboard buttons
+  keyboard?: string[][];   // Keyboard buttons (text)
+  linkKeyboard?: Array<{ label: string; url?: string; app_id?: number; owner_id?: number; hash?: string }>;  // Link or app buttons
   personaFile?: string;    // If set, prepend persona to LLM context
   scriptResults?: string;  // Script outputs to prepend as context when passing to LLM
   imagePrompt?: string;    // If set, runtime generates image via Pollinations.ai
+}
+
+export interface IncomingDoc {
+  url: string;
+  filename?: string;
+  ext?: string;
+}
+
+// Text-injectable file extensions
+const SAGE_FILE_EXTS = new Set([
+  "txt","md","rst","log",
+  "py","js","ts","jsx","tsx","java","cs","cpp","c","h","go","rs","rb","php","swift","kt","scala","r",
+  "sh","bash","zsh","bat","ps1",
+  "json","yaml","yml","toml","ini","cfg","env",
+  "csv","tsv","xml","html","htm","css","sql",
+  "pdf","docx","xlsx",
+]);
+
+function isSageDoc(doc: IncomingDoc): boolean {
+  const ext = (doc.ext ?? doc.filename?.split(".").pop() ?? "").toLowerCase();
+  return SAGE_FILE_EXTS.has(ext);
 }
 
 export async function dispatchButton(
@@ -1021,6 +1024,7 @@ export async function dispatchButton(
   log: (msg: string) => void,
   groqKeys?: string[],
   peerId?: number,
+  incomingDoc?: IncomingDoc,
 ): Promise<DispatchResult> {
   const text = messageText.trim().replace(/\s+/g, ' ');
 
@@ -1113,6 +1117,7 @@ export async function dispatchButton(
       handled: true,
       text: action.response,
       keyboard: action.keyboard,
+      linkKeyboard: action.linkKeyboard,
     };
   }
 
@@ -1243,5 +1248,32 @@ export function buildSimpleKeyboard(buttons: string[][]): string {
           : "primary",
       }))
     ),
+  });
+}
+
+export function buildLinkKeyboard(links: Array<{ label: string; url?: string; app_id?: number; owner_id?: number; hash?: string }>): string {
+  return JSON.stringify({
+    one_time: true,
+    inline: false,
+    buttons: links.map((item) => {
+      if (item.app_id) {
+        return [{
+          action: {
+            type: "open_app",
+            label: item.label.slice(0, 40),
+            app_id: item.app_id,
+            owner_id: item.owner_id ?? 0,
+            hash: item.hash ?? "",
+          },
+        }];
+      }
+      return [{
+        action: {
+          type: "open_link",
+          label: item.label.slice(0, 40),
+          link: item.url ?? "",
+        },
+      }];
+    }),
   });
 }

@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Великий Мудрец</title>
+<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #f0ede8;
+  --s1:        #ffffff;
+  --s2:        #f5f2ed;
+  --s3:        #ede9e3;
+  --ink:       #1a1814;
+  --text:      #1a1814;
+  --muted:     #7a7060;
+  --dim:       #c4bfb5;
+  --accent:    #2d6a4f;
+  --accent2:   #1b4332;
+  --red:       #c0392b;
+  --brd:       rgba(26,24,20,0.1);
+  --brd2:      rgba(26,24,20,0.2);
+  --accent-bg: rgba(45,106,79,0.07);
+  --accent-bd: rgba(45,106,79,0.25);
+  --red-bg:    rgba(192,57,43,0.07);
+  --red-bd:    rgba(192,57,43,0.22);
+  --tab-h:     54px;
+  --hdr-h:     52px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: var(--tab-h);
+  overflow-x: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────── */
+.hdr {
+  background: var(--s1); border-bottom: 1px solid var(--brd);
+  padding: 0 16px; height: var(--hdr-h);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.hdr-logo {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700;
+}
+.hdr-logo span { color: var(--dim); font-weight: 400; }
+.hdr-mode {
+  display: flex; gap: 0; border: 1px solid var(--brd); overflow: hidden;
+}
+.hdr-mode-btn {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 5px 10px; background: var(--s2); border: none;
+  color: var(--muted); cursor: pointer; transition: 0.15s;
+  border-right: 1px solid var(--brd);
+}
+.hdr-mode-btn:last-child { border-right: none; }
+.hdr-mode-btn.active { background: var(--accent-bg); color: var(--accent); }
+
+/* ── Tab bar ─────────────────────────────────────────── */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; height: var(--tab-h);
+  background: var(--s1); border-top: 2px solid var(--brd);
+  display: flex; z-index: 100;
+}
+.tabbar-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  cursor: pointer; color: var(--dim);
+  background: none; border: none; padding: 0; transition: 0.15s;
+}
+.tabbar-item .ti { font-size: 18px; line-height: 1; }
+.tabbar-item .tl {
+  font-family: 'Space Mono', monospace; font-size: 8px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.tabbar-item.active { color: var(--accent); }
+
+/* ── Tab panels ──────────────────────────────────────── */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Ask tab ─────────────────────────────────────────── */
+#tab-ask {
+  display: none;
+  flex-direction: column;
+  height: calc(100vh - var(--hdr-h) - var(--tab-h));
+}
+#tab-ask.active { display: flex; }
+
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+/* Заглушка при пустом чате */
+.chat-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  padding: 32px 24px; text-align: center;
+}
+.chat-empty .icon { font-size: 48px; line-height: 1; }
+.chat-empty h3 { font-size: 17px; font-weight: 700; color: var(--ink); }
+.chat-empty p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.chat-empty-prompts { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 300px; }
+.chat-empty-prompt {
+  background: var(--s1); border: 1px solid var(--brd);
+  padding: 9px 12px; text-align: left; cursor: pointer;
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; color: var(--muted);
+  transition: 0.15s;
+}
+.chat-empty-prompt:hover { border-color: var(--accent-bd); color: var(--accent); background: var(--accent-bg); }
+
+/* Bubble вопроса */
+.msg-question {
+  align-self: flex-end; max-width: 85%;
+  background: var(--accent); color: #fff;
+  padding: 9px 13px; font-size: 14px; line-height: 1.5;
+}
+/* Карточка ответа */
+.msg-answer {
+  align-self: flex-start; width: 100%;
+  background: var(--s1); border: 1px solid var(--brd);
+}
+.msg-answer-hdr {
+  padding: 8px 12px 6px; border-bottom: 1px solid var(--brd);
+  display: flex; align-items: center; gap: 8px;
+}
+.msg-answer-title {
+  font-family: 'Space Mono', monospace; font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.msg-answer-time {
+  font-family: 'Space Mono', monospace; font-size: 9px; color: var(--dim); margin-left: auto;
+}
+.msg-answer-body { padding: 10px 12px; }
+
+/* Блоки "думает" и финал */
+.llm-block { margin-bottom: 10px; }
+.llm-block:last-child { margin-bottom: 0; }
+.llm-name {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 3px;
+}
+.llm-text { font-size: 13px; color: var(--ink); line-height: 1.55; }
+
+.synthesis-block {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--brd);
+}
+.synthesis-label {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 4px;
+}
+.synthesis-text { font-size: 14px; color: var(--ink); line-height: 1.6; font-weight: 500; }
+
+/* Индикатор загрузки */
+.msg-loading {
+  align-self: flex-start;
+  background: var(--s1); border: 1px solid var(--brd);
+  padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+}
+.msg-loading .dots { display: flex; gap: 4px; }
+.msg-loading .dots span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); opacity: 0.3;
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+.msg-loading .dots span:nth-child(2) { animation-delay: 0.2s; }
+.msg-loading .dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+.msg-loading-text {
+  font-family: 'Space Mono', monospace; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+
+/* ── Input bar ───────────────────────────────────────── */
+.input-bar {
+  padding: 10px 12px;
+  background: var(--s1); border-top: 1px solid var(--brd);
+  display: flex; gap: 8px; align-items: flex-end;
+}
+.input-wrap { flex: 1; position: relative; }
+#question-input {
+  width: 100%; background: var(--s2); border: 1px solid var(--brd);
+  color: var(--ink); font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px; padding: 9px 12px;
+  outline: none; resize: none; min-height: 40px; max-height: 120px;
+  transition: border-color 0.15s; line-height: 1.5; overflow-y: auto;
+}
+#question-input:focus { border-color: var(--accent-bd); background: var(--s1); }
+#question-input::placeholder { color: var(--dim); }
+.send-btn {
+  width: 40px; height: 40px; flex-shrink: 0;
+  background: var(--accent); border: none; color: #fff;
+  font-size: 18px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; transition: 0.15s;
+}
+.send-btn:hover { background: var(--accent2); }
+.send-btn:disabled { background: var(--dim); cursor: not-allowed; }
+.file-btn {
+  width: 40px; height: 40px; flex-shrink: 0;
+  background: var(--s2); border: 1px solid var(--brd); color: var(--muted);
+  font-size: 16px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; transition: 0.15s;
+}
+.file-btn:hover { border-color: var(--accent-bd); color: var(--accent); }
+.file-badge {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.05em; padding: 3px 8px;
+  background: var(--accent-bg); border: 1px solid var(--accent-bd);
+  color: var(--accent); margin-bottom: 4px; display: none;
+  align-items: center; gap: 6px;
+}
+.file-badge.visible { display: flex; }
+.file-badge-x { cursor: pointer; color: var(--muted); margin-left: auto; font-size: 11px; }
+#file-input { display: none; }
+
+/* ── Sessions tab ────────────────────────────────────── */
+#tab-sessions { padding: 12px 14px; }
+.sec-label {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sec-label::after { content: ''; flex: 1; height: 1px; background: var(--brd); }
+
+.session-card {
+  background: var(--s1); border: 1px solid var(--brd);
+  padding: 11px 13px; margin-bottom: 6px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; transition: 0.15s;
+}
+.session-card:hover { border-color: var(--brd2); }
+.session-card.active-session { border-color: var(--accent-bd); background: var(--accent-bg); }
+.session-body { flex: 1; min-width: 0; }
+.session-title { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-meta { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--muted); margin-top: 3px; letter-spacing: 0.04em; }
+.session-cnt {
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  color: var(--dim); flex-shrink: 0;
+}
+.session-actions { display: flex; gap: 4px; }
+.session-btn {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 8px; background: none; border: 1px solid var(--brd);
+  color: var(--muted); cursor: pointer; transition: 0.15s;
+}
+.session-btn:hover { border-color: var(--red-bd); color: var(--red); }
+.new-session-btn {
+  width: 100%; padding: 11px; margin-bottom: 12px;
+  background: var(--accent-bg); border: 1px dashed var(--accent-bd);
+  color: var(--accent); font-family: 'Space Mono', monospace;
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer; transition: 0.15s;
+}
+.new-session-btn:hover { background: var(--accent); color: #fff; }
+
+/* ── Error toast ─────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: calc(var(--tab-h) + 12px); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: #fff; padding: 10px 18px;
+  font-family: 'Space Mono', monospace; font-size: 11px;
+  letter-spacing: 0.05em; z-index: 999; opacity: 0;
+  transition: opacity 0.25s; pointer-events: none; max-width: 90%;
+  text-align: center;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-logo">🧙 Мудрец <span>v2</span></div>
+  <div class="hdr-mode">
+    <button class="hdr-mode-btn active" id="mode-auto" onclick="setMode('auto')">Авто</button>
+    <button class="hdr-mode-btn" id="mode-multi" onclick="setMode('multi')">Мульти</button>
+  </div>
+</div>
+
+<!-- Tab: Ask -->
+<div class="tab-panel active" id="tab-ask">
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-empty" id="chat-empty">
+      <div class="icon">🧙</div>
+      <h3>Великий Мудрец</h3>
+      <p>Задай любой вопрос — опрошу несколько ИИ<br>и подытожу самое важное</p>
+      <div class="chat-empty-prompts">
+        <button class="chat-empty-prompt" onclick="usePrompt(this)">Объясни квантовые вычисления простыми словами</button>
+        <button class="chat-empty-prompt" onclick="usePrompt(this)">Какие тренды в AI сейчас самые важные?</button>
+        <button class="chat-empty-prompt" onclick="usePrompt(this)">Как правильно питаться при активном образе жизни?</button>
+      </div>
+    </div>
+  </div>
+  <div class="input-bar">
+    <div class="input-wrap">
+      <div class="file-badge" id="file-badge">
+        <span id="file-badge-name">файл.pdf</span>
+        <span class="file-badge-x" onclick="clearFile()">✕</span>
+      </div>
+      <textarea id="question-input" placeholder="Задай вопрос…" rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    </div>
+    <button class="file-btn" onclick="document.getElementById('file-input').click()" title="Прикрепить файл">📎</button>
+    <button class="send-btn" id="send-btn" onclick="sendQuestion()">→</button>
+    <input type="file" id="file-input"
+      accept=".txt,.md,.py,.js,.ts,.json,.yaml,.yml,.csv,.tsv,.sql,.html,.css,.xml,.pdf,.docx,.xlsx,.rst,.log,.sh,.go,.rs,.java,.cs,.cpp,.c,.h"
+      onchange="handleFile(this)">
+  </div>
+</div>
+
+<!-- Tab: Sessions -->
+<div class="tab-panel" id="tab-sessions">
+  <div style="padding: 12px 14px;">
+    <button class="new-session-btn" onclick="newSession()">+ Новая сессия</button>
+    <div class="sec-label">Сессии</div>
+    <div id="sessions-list">
+      <div style="text-align:center;padding:24px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.08em">ЗАГРУЗКА…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<nav class="tabbar">
+  <button class="tabbar-item active" onclick="switchTab('ask',this)">
+    <span class="ti">💬</span>
+    <span class="tl">Спросить</span>
+  </button>
+  <button class="tabbar-item" onclick="switchTab('sessions',this)">
+    <span class="ti">📋</span>
+    <span class="tl">Сессии</span>
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────
+const API = ""  // тот же домен, относительные пути
+let vkUserId = null;
+let currentSessionId = null;
+let pendingFile = null;  // { url, name }
+let isLoading = false;
+let currentMode = "auto";
+
+// ── VK Bridge init ────────────────────────────────────
+function isInsideVK() {
+  // VK передаёт параметры vk_* в URL при запуске мини-апки
+  return window.location.search.includes("vk_") ||
+         window.location.hash.includes("vk_") ||
+         document.referrer.includes("vk.com") ||
+         window.parent !== window;
+}
+
+async function initVK() {
+  try {
+    if (window.vkBridge && isInsideVK()) {
+      await vkBridge.send("VKWebAppInit");
+      const data = await vkBridge.send("VKWebAppGetUserInfo");
+      vkUserId = String(data.id);
+    } else {
+      // Открыто вне VK — dev/preview режим
+      vkUserId = "dev";
+    }
+  } catch (e) {
+    vkUserId = "dev";
+  }
+  await loadMode();
+}
+
+function authHeaders() {
+  const h = { "Content-Type": "application/json" };
+  if (vkUserId) h["X-VK-User-Id"] = vkUserId;
+  return h;
+}
+
+// ── Mode ──────────────────────────────────────────────
+async function loadMode() {
+  try {
+    const r = await fetch(`${API}/api/mode`, { headers: authHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    currentMode = d.mode || "auto";
+    document.getElementById("mode-auto").classList.toggle("active", currentMode === "auto");
+    document.getElementById("mode-multi").classList.toggle("active", currentMode === "multi");
+  } catch (e) {}
+}
+
+async function setMode(mode) {
+  try {
+    await fetch(`${API}/api/mode`, {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify({ mode })
+    });
+    currentMode = mode;
+    document.getElementById("mode-auto").classList.toggle("active", mode === "auto");
+    document.getElementById("mode-multi").classList.toggle("active", mode === "multi");
+    showToast(mode === "multi" ? "Мульти-режим: все модели" : "Авто-режим: лучшие модели");
+  } catch (e) { showToast("Ошибка смены режима"); }
+}
+
+// ── Tab switch ────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tabbar-item").forEach(b => b.classList.remove("active"));
+  document.getElementById(`tab-${name}`).classList.add("active");
+  btn.classList.add("active");
+  if (name === "sessions") loadSessions();
+}
+
+// ── Sessions ──────────────────────────────────────────
+async function loadSessions() {
+  const el = document.getElementById("sessions-list");
+  try {
+    const r = await fetch(`${API}/api/sessions`, { headers: authHeaders() });
+    const sessions = await r.json();
+    if (!sessions.length) {
+      el.innerHTML = `<div style="text-align:center;padding:24px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.08em">НЕТ СЕССИЙ</div>`;
+      return;
+    }
+    el.innerHTML = sessions.map(s => `
+      <div class="session-card ${s.id === currentSessionId ? 'active-session' : ''}" onclick="openSession('${s.id}', ${JSON.stringify(s.title).replace(/'/g,"&#39;")})">
+        <div class="session-body">
+          <div class="session-title">${escHtml(s.title)}</div>
+          <div class="session-meta">${formatDate(s.updated_at)} · ${s.cnt} сообщ.</div>
+        </div>
+        <div class="session-actions">
+          <button class="session-btn" onclick="event.stopPropagation();archiveSession('${s.id}')">архив</button>
+          <button class="session-btn" onclick="event.stopPropagation();deleteSession('${s.id}')">удалить</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);padding:16px;font-size:13px;">Ошибка загрузки</div>`;
+  }
+}
+
+function newSession() {
+  currentSessionId = null;
+  document.getElementById("chat-messages").innerHTML = "";
+  renderChatEmpty();
+  switchTab("ask", document.querySelector(".tabbar-item"));
+  document.querySelectorAll(".tabbar-item").forEach((b,i) => b.classList.toggle("active", i===0));
+}
+
+async function openSession(sid, title) {
+  currentSessionId = sid;
+  switchTab("ask", document.querySelector(".tabbar-item"));
+  document.querySelectorAll(".tabbar-item").forEach((b,i) => b.classList.toggle("active", i===0));
+  const el = document.getElementById("chat-messages");
+  el.innerHTML = `<div class="msg-loading"><div class="dots"><span></span><span></span><span></span></div><div class="msg-loading-text">загрузка…</div></div>`;
+  try {
+    const r = await fetch(`${API}/api/sessions/${sid}/messages`, { headers: authHeaders() });
+    const messages = await r.json();
+    el.innerHTML = "";
+    if (!messages.length) { renderChatEmpty(); return; }
+    document.getElementById("chat-empty")?.remove();
+    for (const m of messages) {
+      appendQuestion(m.question);
+      appendAnswer(m.synthesis, m.asked_at);
+    }
+    scrollChat();
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);padding:16px;">Ошибка загрузки сессии</div>`;
+  }
+}
+
+async function archiveSession(sid) {
+  await fetch(`${API}/api/sessions/${sid}/archive`, { method: "POST", headers: authHeaders() });
+  if (sid === currentSessionId) { currentSessionId = null; }
+  loadSessions();
+}
+
+async function deleteSession(sid) {
+  if (!confirm("Удалить сессию?")) return;
+  await fetch(`${API}/api/sessions/${sid}`, { method: "DELETE", headers: authHeaders() });
+  if (sid === currentSessionId) { currentSessionId = null; }
+  loadSessions();
+}
+
+// ── Chat ──────────────────────────────────────────────
+function renderChatEmpty() {
+  const el = document.getElementById("chat-messages");
+  if (el.querySelector(".chat-empty")) return;
+  el.innerHTML = `
+    <div class="chat-empty" id="chat-empty">
+      <div class="icon">🧙</div>
+      <h3>Великий Мудрец</h3>
+      <p>Задай любой вопрос — опрошу несколько ИИ<br>и подытожу самое важное</p>
+      <div class="chat-empty-prompts">
+        <button class="chat-empty-prompt" onclick="usePrompt(this)">Объясни квантовые вычисления простыми словами</button>
+        <button class="chat-empty-prompt" onclick="usePrompt(this)">Какие тренды в AI сейчас самые важные?</button>
+        <button class="chat-empty-prompt" onclick="usePrompt(this)">Как правильно питаться при активном образе жизни?</button>
+      </div>
+    </div>`;
+}
+
+function appendQuestion(text) {
+  const el = document.getElementById("chat-messages");
+  document.getElementById("chat-empty")?.remove();
+  const div = document.createElement("div");
+  div.className = "msg-question";
+  div.textContent = text;
+  el.appendChild(div);
+}
+
+function appendAnswer(synthesisText, timeStr) {
+  const el = document.getElementById("chat-messages");
+  const blocks = parseSynthesis(synthesisText);
+  const div = document.createElement("div");
+  div.className = "msg-answer";
+  div.innerHTML = `
+    <div class="msg-answer-hdr">
+      <span class="msg-answer-title">🧙 Великий Мудрец</span>
+      <span class="msg-answer-time">${timeStr ? formatTime(timeStr) : "сейчас"}</span>
+    </div>
+    <div class="msg-answer-body">${blocks}</div>
+  `;
+  el.appendChild(div);
+}
+
+function parseSynthesis(text) {
+  if (!text) return `<div class="llm-text">…</div>`;
+  const lines = text.split("\n");
+  let html = "";
+  let synthesisPart = "";
+  let synthesisStarted = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Финальный вывод
+    if (trimmed.startsWith("Я же в свою очередь") || trimmed.startsWith("Я же хочу подытожить")) {
+      synthesisStarted = true;
+      const colon = trimmed.indexOf(":");
+      synthesisPart = colon >= 0 ? trimmed.slice(colon + 1).trim() : trimmed;
+      continue;
+    }
+    if (synthesisStarted) {
+      synthesisPart += " " + trimmed;
+      continue;
+    }
+
+    // Строка "LLM думает:"
+    const m = trimmed.match(/^(.+?)\s+думает:\s*(.*)$/);
+    if (m) {
+      html += `
+        <div class="llm-block">
+          <div class="llm-name">${escHtml(m[1])}</div>
+          <div class="llm-text">${escHtml(m[2])}</div>
+        </div>`;
+    } else {
+      // Любой другой текст — добавляем в конец
+      synthesisPart += " " + trimmed;
+    }
+  }
+
+  if (synthesisPart.trim()) {
+    html += `
+      <div class="synthesis-block">
+        <div class="synthesis-label">Итог</div>
+        <div class="synthesis-text">${escHtml(synthesisPart.trim())}</div>
+      </div>`;
+  }
+  return html || `<div class="llm-text">${escHtml(text)}</div>`;
+}
+
+function appendLoading() {
+  const el = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = "msg-loading"; div.id = "loading-bubble";
+  div.innerHTML = `
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="msg-loading-text" id="loading-text">опрашиваю модели…</div>`;
+  el.appendChild(div);
+  scrollChat();
+  return div;
+}
+
+function scrollChat() {
+  const el = document.getElementById("chat-messages");
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Send ──────────────────────────────────────────────
+async function sendQuestion() {
+  if (isLoading) return;
+  const input = document.getElementById("question-input");
+  const question = input.value.trim();
+  if (!question) return;
+
+  isLoading = true;
+  input.value = "";
+  autoResize(input);
+  document.getElementById("send-btn").disabled = true;
+
+  appendQuestion(pendingFile ? `📎 ${pendingFile.name}\n${question}` : question);
+
+  const loadingEl = appendLoading();
+
+  // Анимируем текст загрузки
+  const loadingTexts = ["опрашиваю модели…", "жду ответов…", "синтезирую…"];
+  let ltIdx = 0;
+  const ltInterval = setInterval(() => {
+    ltIdx = (ltIdx + 1) % loadingTexts.length;
+    const el = document.getElementById("loading-text");
+    if (el) el.textContent = loadingTexts[ltIdx];
+  }, 3000);
+
+  try {
+    const body = {
+      question,
+      session_id: currentSessionId,
+    };
+    if (pendingFile) {
+      body.file_url = pendingFile.url;
+      body.file_name = pendingFile.name;
+    }
+
+    const r = await fetch(`${API}/api/ask`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+
+    clearInterval(ltInterval);
+    loadingEl.remove();
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      showToast(err.error || "Ошибка запроса");
+    } else {
+      const d = await r.json();
+      if (d.session_id) currentSessionId = d.session_id;
+      appendAnswer(d.text, null);
+    }
+  } catch (e) {
+    clearInterval(ltInterval);
+    loadingEl.remove();
+    showToast("Нет соединения с сервером");
+  }
+
+  clearFile();
+  isLoading = false;
+  document.getElementById("send-btn").disabled = false;
+  scrollChat();
+}
+
+function handleKey(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendQuestion();
+  }
+}
+
+function usePrompt(btn) {
+  document.getElementById("question-input").value = btn.textContent;
+  autoResize(document.getElementById("question-input"));
+  sendQuestion();
+}
+
+// ── File attach ───────────────────────────────────────
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  // Загружаем файл через API (отдаём base64 или FormData)
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      // Отправляем файл на сервер, получаем временный URL
+      const formData = new FormData();
+      formData.append("file", file);
+      const r = await fetch(`${API}/api/upload`, {
+        method: "POST",
+        headers: { "X-VK-User-Id": vkUserId || "dev" },
+        body: formData,
+      });
+      if (!r.ok) throw new Error("upload failed");
+      const d = await r.json();
+      pendingFile = { url: d.url, name: file.name };
+      document.getElementById("file-badge-name").textContent = file.name;
+      document.getElementById("file-badge").classList.add("visible");
+    } catch (err) {
+      showToast("Не удалось загрузить файл");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = "";
+}
+
+function clearFile() {
+  pendingFile = null;
+  document.getElementById("file-badge").classList.remove("visible");
+}
+
+// ── Helpers ───────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/\n/g, "<br>");
+}
+
+function formatDate(s) {
+  if (!s) return "";
+  try {
+    const d = new Date(s);
+    return d.toLocaleDateString("ru", { day: "2-digit", month: "2-digit" }) + " " +
+           d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+  } catch { return s; }
+}
+
+function formatTime(s) {
+  if (!s) return "";
+  try {
+    const d = new Date(s);
+    return d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+let toastTimer;
+function showToast(msg, dur = 3000) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), dur);
+}
+
+// ── Init ──────────────────────────────────────────────
+initVK();
+</script>
+</body>
+</html>

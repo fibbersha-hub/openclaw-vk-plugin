@@ -3,7 +3,8 @@
 # Manages discussion sessions: save, list, archive, report generation
 # Storage: SQLite at /opt/openclaw-sage/sage.db
 # Usage:
-#   sage.py ask <peer_id> <question>        — query all LLMs + synthesize
+#   sage.py ask <peer_id> <question>                        — query all LLMs + synthesize
+#   sage.py ask_file <peer_id> <question> <url> [filename]  — ask with file context
 #   sage.py list <peer_id>                  — list sessions for user
 #   sage.py resume <session_id>             — get session messages for context
 #   sage.py archive_list <peer_id>          — list archived sessions
@@ -23,16 +24,52 @@ import sqlite3
 import textwrap
 import urllib.request
 import urllib.error
+import tempfile
+import pathlib
 from datetime import datetime
 
 DB_PATH = "/opt/openclaw-sage/sage.db"
 REPORTS_DIR = "/opt/openclaw-sage/reports"
 REPORT_GEN  = "/opt/browser-bridge/report-generator.js"
 BRIDGE_URL = "http://127.0.0.1:7788"
-CEREBRAS_KEY = os.environ.get("CEREBRAS_KEY", "")
+def _load_cerebras_key() -> str:
+    key = os.environ.get("CEREBRAS_KEY", "")
+    if not key:
+        try:
+            cfg_path = os.path.expanduser("~/.openclaw/openclaw.json")
+            with open(cfg_path) as f:
+                cfg = json.load(f)
+            key = cfg.get("models", {}).get("providers", {}).get("cerebras", {}).get("apiKey", "")
+        except Exception:
+            pass
+    return key
+
+CEREBRAS_KEY = _load_cerebras_key()
 CEREBRAS_MODEL = "llama3.1-8b"
 MAX_CHARS_PER_LLM = 400
 MAX_SESSIONS_SHOWN = 8
+
+# Поддерживаемые форматы файлов (текстовая инъекция)
+SUPPORTED_TEXT_EXTS = {
+    # Текст и документы
+    "txt", "md", "rst", "log",
+    # Код
+    "py", "js", "ts", "jsx", "tsx", "java", "cs", "cpp", "c", "h",
+    "go", "rs", "rb", "php", "swift", "kt", "scala", "r",
+    "sh", "bash", "zsh", "bat", "ps1",
+    # Данные
+    "json", "yaml", "yml", "toml", "ini", "cfg", "env",
+    "csv", "tsv", "xml", "html", "htm", "css",
+    # SQL
+    "sql",
+}
+SUPPORTED_BINARY_EXTS = {
+    "pdf",   # требует pdfplumber
+    "docx",  # требует python-docx
+    "xlsx",  # требует openpyxl
+}
+MAX_FILE_SIZE = 2 * 1024 * 1024   # 2 MB
+MAX_FILE_CHARS = 12_000            # обрезаем чтобы не переполнить контекст
 
 # ── Режимы работы ─────────────────────────────────────────────────────────────
 # auto  — авто-выбор лучшей модели под тип задачи (по умолчанию)
@@ -222,6 +259,108 @@ def llm_display_name(spec):
     return names.get(spec, spec)
 
 
+# ── File handling ────────────────────────────────────────────────────────────
+
+def fetch_file(url: str) -> tuple[bytes, str]:
+    """Скачать файл по URL. Поддерживает http/https и file://. Возвращает (bytes, filename)."""
+    # Локальный файл (загружен через /api/upload)
+    if url.startswith("file://"):
+        local_path = url[7:]
+        with open(local_path, "rb") as f:
+            data = f.read(MAX_FILE_SIZE + 1)
+        if len(data) > MAX_FILE_SIZE:
+            raise ValueError(f"Файл слишком большой (>{MAX_FILE_SIZE // 1024 // 1024} МБ)")
+        filename = pathlib.Path(local_path).name
+        return data, filename
+
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = resp.read(MAX_FILE_SIZE + 1)
+    if len(data) > MAX_FILE_SIZE:
+        raise ValueError(f"Файл слишком большой (>{MAX_FILE_SIZE // 1024 // 1024} МБ)")
+    filename = pathlib.PurePosixPath(url.split("?")[0]).name or "file"
+    return data, filename
+
+
+def extract_text_from_file(data: bytes, filename: str) -> str:
+    """Извлечь текст из файла по его содержимому и имени. Возвращает строку."""
+    ext = pathlib.Path(filename).suffix.lstrip(".").lower()
+
+    # Текстовые форматы — читаем напрямую
+    if ext in SUPPORTED_TEXT_EXTS:
+        for enc in ("utf-8", "cp1251", "latin-1"):
+            try:
+                return data.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        raise ValueError("Не удалось декодировать текстовый файл")
+
+    # PDF
+    if ext == "pdf":
+        try:
+            import pdfplumber
+            import io
+            with pdfplumber.open(io.BytesIO(data)) as pdf:
+                pages = [p.extract_text() or "" for p in pdf.pages]
+            return "\n\n".join(p for p in pages if p.strip())
+        except ImportError:
+            raise ValueError("PDF не поддерживается: установи pdfplumber (pip install pdfplumber)")
+
+    # DOCX
+    if ext == "docx":
+        try:
+            import docx
+            import io
+            doc = docx.Document(io.BytesIO(data))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except ImportError:
+            raise ValueError("DOCX не поддерживается: установи python-docx (pip install python-docx)")
+
+    # XLSX
+    if ext == "xlsx":
+        try:
+            import openpyxl
+            import io
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            lines = []
+            for ws in wb.worksheets:
+                lines.append(f"=== Лист: {ws.title} ===")
+                for row in ws.iter_rows(values_only=True):
+                    row_text = "\t".join("" if v is None else str(v) for v in row)
+                    if row_text.strip():
+                        lines.append(row_text)
+            return "\n".join(lines)
+        except ImportError:
+            raise ValueError("XLSX не поддерживается: установи openpyxl (pip install openpyxl)")
+
+    raise ValueError(f"Формат .{ext} не поддерживается")
+
+
+def load_file_context(url: str, filename: str | None = None) -> tuple[str, str]:
+    """Скачать файл и вернуть (text_content, display_name).
+    Обрезает до MAX_FILE_CHARS символов с пометкой.
+    """
+    data, auto_name = fetch_file(url)
+    name = filename or auto_name
+    text = extract_text_from_file(data, name)
+    text = text.strip()
+    truncated = False
+    if len(text) > MAX_FILE_CHARS:
+        text = text[:MAX_FILE_CHARS]
+        truncated = True
+    if truncated:
+        text += f"\n\n[... файл обрезан до {MAX_FILE_CHARS} символов ...]"
+    return text, name
+
+
+def supported_ext(filename: str) -> bool:
+    ext = pathlib.Path(filename).suffix.lstrip(".").lower()
+    return ext in SUPPORTED_TEXT_EXTS or ext in SUPPORTED_BINARY_EXTS
+
+
 # ── Bridge HTTP ───────────────────────────────────────────────────────────────
 
 def bridge_post(path, payload):
@@ -272,7 +411,7 @@ def truncate(text, max_chars):
 
 # ── Core: ask ─────────────────────────────────────────────────────────────────
 
-def cmd_ask(peer_id, question, session_id=None):
+def cmd_ask(peer_id, question, session_id=None, file_url=None, file_name=None):
     peer_id = int(peer_id)
 
     # Определяем режим и тип задачи
@@ -280,20 +419,43 @@ def cmd_ask(peer_id, question, session_id=None):
     mode = get_peer_mode(conn, peer_id)
     conn.close()
 
-    task_type = detect_task_type(question)
+    # Загружаем файл если передан
+    file_context = None
+    file_display = None
+    if file_url:
+        try:
+            print(f"📎 Загружаю файл...")
+            file_context, file_display = load_file_context(file_url, file_name)
+            print(f"📄 Файл прочитан: {file_display} ({len(file_context)} символов)")
+        except Exception as e:
+            print(f"⚠️ Не удалось прочитать файл: {e}")
+            # Продолжаем без файла
+
+    # Формируем вопрос с контекстом файла
+    full_question = question
+    if file_context:
+        full_question = (
+            f"{question}\n\n"
+            f"---\n"
+            f"📎 Содержимое файла «{file_display}»:\n\n"
+            f"{file_context}"
+        )
+
+    task_type = detect_task_type(question)  # определяем тип по вопросу, не по файлу
     llm_list  = build_llm_list(mode, task_type)
 
     mode_label = _MODE_LABELS.get(mode, mode)
     task_label = _TASK_LABELS.get(task_type, task_type)
 
+    file_note = f" · 📎 {file_display}" if file_display else ""
     if mode == "multi":
-        print(f"⏳ Мульти-режим активен — опрашиваю {len(llm_list)} моделей. Это займёт 10-15 минут...")
+        print(f"⏳ Мульти-режим активен — опрашиваю {len(llm_list)} моделей. Это займёт 10-15 минут{file_note}...")
     else:
-        print(f"⏳ Авто-режим: задача «{task_label}» — подбираю лучшие модели...")
+        print(f"⏳ Авто-режим: задача «{task_label}»{file_note} — подбираю лучшие модели...")
 
     # Query LLMs via bridge
     try:
-        result = bridge_post("/query-all", {"llms": llm_list, "message": question})
+        result = bridge_post("/query-all", {"llms": llm_list, "message": full_question})
         responses = result.get("responses", [])
     except Exception as e:
         print(f"❌ Ошибка связи с браузером: {e}")
@@ -323,15 +485,19 @@ def cmd_ask(peer_id, question, session_id=None):
 
     # Synthesize with Cerebras
     llm_block = "\n\n".join(f"### {e['llm']}:\n{e['text']}" for e in extracts)
+    llm_names = ", ".join(e["llm"] for e in extracts)
     system_prompt = (
-        f"Ты — Великий Мудрец, синтезатор знаний. Тебе дали ответы {len(extracts)} разных ИИ на один вопрос. "
-        "Твоя задача:\n"
-        "1. Найти консенсус между ответами\n"
-        "2. Отметить расхождения если они есть\n"
-        "3. Дать чёткий итоговый вывод (3-5 предложений)\n"
-        "Отвечай на русском. Будь конкретен и лаконичен."
+        f"Ты — Великий Мудрец. Тебе дали ответы {len(extracts)} ИИ ({llm_names}) на один вопрос.\n"
+        "Твой ответ СТРОГО в таком формате (без заголовков, без лишнего текста):\n\n"
+        + "".join(f"{e['llm']} думает: [1-2 самые интересные/уникальные мысли из его ответа]\n" for e in extracts)
+        + "\nЯ же в свою очередь хочу подытожить и предлагаю следующее: [итоговый вывод 2-4 предложения]\n\n"
+        "Правила:\n"
+        "- В каждой строке «думает» — самое неочевидное или ценное из ответа, НЕ пересказ\n"
+        "- Если несколько ИИ сказали одно и то же — упомяни только у одного\n"
+        "- Финальный вывод — твоё собственное заключение, не просто повтор\n"
+        "- Отвечай на русском. Не добавляй ничего до и после формата."
     )
-    user_prompt = f"Вопрос: {question}\n\nОтветы ИИ:\n\n{llm_block}\n\nДай синтез."
+    user_prompt = f"Вопрос: {question}\n\nОтветы ИИ:\n\n{llm_block}"
 
     try:
         synthesis = cerebras_chat([
@@ -339,15 +505,19 @@ def cmd_ask(peer_id, question, session_id=None):
             {"role": "user", "content": user_prompt},
         ])
     except Exception as e:
-        synthesis = f"[Синтез недоступен: {e}]\n\n" + "\n\n".join(
-            f"**{ex['llm']}:** {ex['text']}" for ex in extracts
-        )
+        # Fallback: brief manual format
+        lines = [f"{ex['llm']} думает: {ex['text'][:150].rstrip()}…" for ex in extracts]
+        lines.append(f"\nЯ же в свою очередь хочу подытожить и предлагаю следующее: [Синтез недоступен: {e}]")
+        synthesis = "\n".join(lines)
 
-    # Save to DB
+    # Save to DB (сохраняем оригинальный вопрос без содержимого файла)
+    saved_question = question
+    if file_display:
+        saved_question = f"[📎 {file_display}] {question}"
     conn = get_db()
     if not session_id:
         session_id = new_id()
-        title = question[:60] + ("…" if len(question) > 60 else "")
+        title = saved_question[:60] + ("…" if len(saved_question) > 60 else "")
         ts = now()
         conn.execute(
             "INSERT INTO sessions (id, peer_id, title, created_at, updated_at) VALUES (?,?,?,?,?)",
@@ -358,7 +528,7 @@ def cmd_ask(peer_id, question, session_id=None):
 
     conn.execute(
         "INSERT INTO messages (session_id, question, responses, synthesis, asked_at) VALUES (?,?,?,?,?)",
-        (session_id, question, json.dumps(extracts), synthesis, now())
+        (session_id, saved_question, json.dumps(extracts), synthesis, now())
     )
     conn.commit()
     conn.close()
@@ -366,10 +536,10 @@ def cmd_ask(peer_id, question, session_id=None):
     # Format output
     ok_llms = ", ".join(e["llm"] for e in extracts)
     err_part = f"\n⚠️ Не ответили: {', '.join(errors)}" if errors else ""
+    file_badge = f" · 📎 {file_display}" if file_display else ""
     print(f"SESSION_ID:{session_id}")
-    print(f"🧙 Великий Мудрец опросил {len(extracts)} ИИ · {mode_label} · задача: {task_label}")
-    print(f"Опрошены: {ok_llms}{err_part}\n")
-    print(f"**Синтез:**\n{synthesis}")
+    print(f"🧙 Великий Мудрец · {mode_label} · задача: {task_label}{file_badge}{err_part}\n")
+    print(synthesis)
 
 
 # ── List sessions ─────────────────────────────────────────────────────────────
@@ -678,6 +848,21 @@ def main():
     if cmd == "ask" and len(args) >= 3:
         session_id = args[3] if len(args) > 3 else None
         cmd_ask(args[1], args[2], session_id)
+    elif cmd == "ask_file" and len(args) >= 4:
+        # ask_file <peer_id> <question> <file_url> [filename] [session_id]
+        file_url  = args[3]
+        file_name = args[4] if len(args) > 4 and not args[4].startswith("ses_") else None
+        session_id = args[5] if len(args) > 5 else (args[4] if len(args) > 4 and len(args[4]) == 8 and args[4].isalnum() else None)
+        cmd_ask(args[1], args[2], session_id, file_url=file_url, file_name=file_name)
+    elif cmd == "get_file_text" and len(args) >= 2:
+        # get_file_text <url> [filename] — download and print file text for LLM injection
+        file_url  = args[1]
+        file_name = args[2] if len(args) > 2 else None
+        try:
+            text, display = load_file_context(file_url, file_name)
+            print(f"[ФАЙЛ: {display}]\n\n{text}")
+        except Exception as e:
+            print(f"[Не удалось прочитать файл: {e}]")
     elif cmd == "list" and len(args) >= 2:
         cmd_list(args[1])
     elif cmd == "resume" and len(args) >= 2:
