@@ -1137,3 +1137,106 @@ linkKeyboard: [{ label: "🧙 Открыть Великого Мудреца", a
 | URL в VK Developer Console | ⚠️ нужно обновить вручную |
 
 **Репо:** https://github.com/fibbersha-hub/openclaw-vk-plugin
+
+---
+
+## Сессия 2026-04-25/26 — Восстановление и система самоконтроля
+
+### 1. Диагностика: почему Великий Мудрец выдавал ошибки 504
+
+Корневая причина — три уровня проблем:
+
+| Уровень | Проблема |
+|---------|---------|
+| Perplexity | Сессия слетела, вкладка попала на страницу логина `?login-source=oneTapHome` |
+| `Promise.allSettled` | Ждёт ВСЕ LLMs — один зависший = весь `/query-all` висит 3 мин |
+| 6 LLMs параллельно | CDP `dispatchMouseEvent timed out` — браузер перегружается |
+
+Диагностика показала: сессии Claude, ChatGPT и Perplexity **живые**, проблема только в параллельной перегрузке CDP при 5+ одновременных страницах.
+
+---
+
+### 2. Фиксы производительности
+
+#### sage.py — авто-режим сокращён до 3 LLMs
+```
+Было: 6 LLMs (2 батча × 90s = 3-4 мин) → не укладывалось в 5-мин таймаут
+Стало: 3 LLM (1 батч = 60-90s) → ответ приходит вовремя
+```
+
+Подбор по типу задачи:
+- code: deepseek:r1, qwen:coder, chatgpt
+- reasoning: deepseek:r1, claude, chatgpt
+- creative: chatgpt, claude, qwen
+- general: deepseek, chatgpt, claude
+
+#### browser-llm-bridge.js — pLimit(3)
+Заменили `Promise.allSettled(all)` на `pLimit(tasks, 3)` — максимум 3 вкладки одновременно. Снимает перегрузку CDP.
+
+---
+
+### 3. Система самоконтроля: llm-health.js
+
+Новый модуль отслеживает состояние каждого LLM. Детектирует известные паттерны ошибок и автоматически отключает проблемные LLMs на период кулдауна.
+
+| Паттерн | Сигнал | Откл. | Восстановление |
+|---------|--------|-------|----------------|
+| SESSION_EXPIRED | URL: login-source, sign_in, /auth | 4 ч | Ручное |
+| RATE_LIMITED | "rate limit", "429", "daily limit" | 6 ч | Ручное |
+| CDP_OVERLOAD | "dispatchMouseEvent timed out" | 15 мин | Авто |
+| NAV_TIMEOUT | "Navigation timeout", ERR_CONNECTION | 10 мин | Авто |
+| CONSECUTIVE_FAILURES | 3 ошибки подряд | 30 мин | Авто |
+
+Новые HTTP эндпоинты на порту 7788:
+- GET /llm-status — статус всех LLMs
+- POST /llm-reset {"llm":"chatgpt"} — ручное восстановление
+
+VK-уведомления владельцу при каждом новом отключении и восстановлении (кулдаун 15 мин).
+
+---
+
+### 4. Умная фильтрация в sage.py
+
+Перед каждым запросом sage.py проверяет /llm-status и убирает отключённые LLMs из списка. Если все предпочтительные отключены — fallback на любые доступные из общего пула.
+
+---
+
+### 5. Watchdog + cron
+
+Файл: /opt/browser-bridge/sage-watchdog.py
+Cron: каждые 5 минут
+
+Что делает:
+1. Проверяет бридж (порт 7788) и sage-miniapp (порт 5001)
+2. Авто-рестарт если сервис упал
+3. VK-уведомление о рестарте или неудаче
+4. Сверяет статус disabled LLMs — уведомляет о новых событиях
+5. Сканирует bridge-лог на известные паттерны
+
+---
+
+### 6. Ежедневный дайджест для Любы
+
+Файл: /opt/browser-bridge/sage-daily-digest.py
+Cron: 0 9 * * * (9:00 UTC = 15:00 Алматы)
+Получатель: VK user 27733429
+
+Содержит:
+- Сводку активности Великого Мудреца за день
+- Список рабочих / отключённых LLMs
+- Топ тем запросов
+
+---
+
+### 7. Деплой
+
+| Файл | Статус |
+|------|--------|
+| browser-bridge/llm-health.js | деплой |
+| browser-bridge/browser-llm-bridge.js | обновлён, перезапущен |
+| browser-bridge/sage.py | обновлён |
+| browser-bridge/sage-watchdog.py | деплой |
+| cron watchdog каждые 5 мин | установлен |
+| sage-miniapp.service | перезапущен |
+
+Репо: https://github.com/fibbersha-hub/openclaw-vk-plugin (commit 578a21d)
