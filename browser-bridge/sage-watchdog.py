@@ -15,7 +15,7 @@ BRIDGE_LOG    = '/var/log/browser-llm-bridge.log'
 BRIDGE_PID    = '/var/run/browser-bridge/bridge.pid'
 STATE_FILE    = '/tmp/sage-watchdog-state.json'   # persists across runs
 OPENCLAW_CFG  = '/root/.openclaw/openclaw.json'
-VK_OWNER_ID   = '460657784'
+VK_OWNER_ID   = os.environ.get('VK_OWNER_ID', 'YOUR_VK_USER_ID')
 NOTIFY_COOLDOWN = 15 * 60  # seconds between same-type notifications
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
