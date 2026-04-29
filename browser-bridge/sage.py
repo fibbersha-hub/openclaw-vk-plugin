@@ -870,6 +870,60 @@ def cmd_set_mode(peer_id, mode):
         )
 
 
+# ── Image Generation: Pollinations.AI ────────────────────────────────────────
+# Команда: sage.py generate_image <peer_id> <prompt> [width] [height]
+# Возвращает:
+#   IMAGE_URL:<url>         — прямая ссылка на изображение
+#   IMAGE_FILE:<local_path> — если скачан локально (для загрузки в VK)
+# Использует Pollinations.AI — бесплатный GET API, без ключа и аккаунта.
+
+POLLINATIONS_BASE = "https://image.pollinations.ai/prompt"
+IMAGE_DOWNLOAD_DIR = "/tmp/sage-images"
+
+def cmd_generate_image(peer_id, prompt, width=1024, height=1024):
+    """Генерация изображения через Pollinations.AI и сохранение локально."""
+    import urllib.parse as _urlparse
+
+    os.makedirs(IMAGE_DOWNLOAD_DIR, exist_ok=True)
+
+    encoded = _urlparse.quote(prompt, safe="")
+    url = f"{POLLINATIONS_BASE}/{encoded}?width={width}&height={height}&nologo=true&model=flux"
+
+    print(f"🎨 Генерирую изображение: {prompt[:80]}...")
+    print(f"🌐 URL: {url}")
+
+    # Скачиваем изображение
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            ext = "jpg"
+            if "png" in content_type:
+                ext = "png"
+            elif "webp" in content_type:
+                ext = "webp"
+            data = resp.read()
+    except Exception as e:
+        print(f"❌ Ошибка генерации изображения: {e}")
+        sys.exit(1)
+
+    if len(data) < 1000:
+        print(f"❌ Получен слишком маленький файл ({len(data)} байт) — возможно ошибка сервиса")
+        sys.exit(1)
+
+    # Сохраняем файл
+    import uuid as _uuid
+    fname = f"{IMAGE_DOWNLOAD_DIR}/img_{_uuid.uuid4().hex[:8]}.{ext}"
+    with open(fname, "wb") as f:
+        f.write(data)
+
+    size_kb = len(data) // 1024
+    print(f"✅ Изображение готово: {fname} ({size_kb} KB)")
+    print(f"IMAGE_FILE:{fname}")
+    print(f"IMAGE_URL:{url}")
+    print(f"IMAGE_SIZE:{size_kb}KB")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
@@ -920,6 +974,11 @@ def main():
         cmd_get_mode(args[1])
     elif cmd == "set_mode" and len(args) >= 3:
         cmd_set_mode(args[1], args[2])
+    elif cmd == "generate_image" and len(args) >= 3:
+        # generate_image <peer_id> <prompt> [width] [height]
+        width  = int(args[3]) if len(args) > 3 else 1024
+        height = int(args[4]) if len(args) > 4 else 1024
+        cmd_generate_image(args[1], args[2], width, height)
     else:
         print(f"Неизвестная команда: {cmd}")
         sys.exit(1)

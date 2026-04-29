@@ -1330,6 +1330,86 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Image generation endpoint ──────────────────────────────────────────────
+  // POST /generate-image  body: { service, prompt, width?, height? }
+  // Supported services:
+  //   "pollinations" — free GET API, no key, no account (default)
+  //   "browser:<adapter>"  — future: use CDP browser tab for Suno/Kling/etc
+  if (req.method === 'POST' && req.url === '/generate-image') {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', async () => {
+      try {
+        const { service = 'pollinations', prompt, width = 1024, height = 1024 } = JSON.parse(body);
+        if (!prompt) {
+          res.writeHead(400);
+          return res.end(JSON.stringify({ error: 'prompt required' }));
+        }
+
+        L.info('image', `Service: ${service}, prompt: "${prompt.slice(0, 60)}..."`);
+
+        if (service === 'pollinations') {
+          // Free GET API — no auth, no account required
+          const encoded = encodeURIComponent(prompt);
+          const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&nologo=true&model=flux`;
+
+          // Fetch image bytes
+          const https = require('https');
+          const imageData = await new Promise((resolve, reject) => {
+            https.get(imageUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (imgRes) => {
+              const chunks = [];
+              imgRes.on('data', c => chunks.push(c));
+              imgRes.on('end', () => resolve({ buffer: Buffer.concat(chunks), contentType: imgRes.headers['content-type'] || 'image/jpeg' }));
+              imgRes.on('error', reject);
+            }).on('error', reject).setTimeout(60000, () => reject(new Error('Image fetch timeout')));
+          });
+
+          if (imageData.buffer.length < 1000) {
+            throw new Error(`Image too small (${imageData.buffer.length} bytes) — service may have returned an error`);
+          }
+
+          // Save to temp file
+          const ext = imageData.contentType.includes('png') ? 'png' : imageData.contentType.includes('webp') ? 'webp' : 'jpg';
+          const tmpFile = `/tmp/bridge-image-${Date.now()}.${ext}`;
+          fs.writeFileSync(tmpFile, imageData.buffer);
+
+          L.info('image', `Saved: ${tmpFile} (${Math.round(imageData.buffer.length/1024)}KB)`);
+          res.writeHead(200);
+          return res.end(JSON.stringify({
+            service: 'pollinations',
+            url: imageUrl,
+            file: tmpFile,
+            size_bytes: imageData.buffer.length,
+            content_type: imageData.contentType,
+          }));
+        }
+
+        // Future: browser-based adapters for Suno, Kling, PixVerse etc.
+        // Example: service = "browser:suno" → open suno.com tab, submit prompt, download result
+        // Currently returns stub for planning purposes
+        if (service.startsWith('browser:')) {
+          const adapterName = service.split(':')[1];
+          L.warn('image', `Browser adapter "${adapterName}" not yet implemented`);
+          res.writeHead(501);
+          return res.end(JSON.stringify({
+            error: `Browser adapter for "${adapterName}" not yet implemented`,
+            planned: true,
+            note: `To implement: add MEDIA_ADAPTERS.${adapterName} with url, inputSelectors, downloadSelectors`
+          }));
+        }
+
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: `Unknown service: ${service}. Supported: pollinations, browser:<name>` }));
+
+      } catch (e) {
+        L.error('image', `generate-image failed: ${e.message}`);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(404);
   res.end(JSON.stringify({ error: 'not found' }));
 });

@@ -34,6 +34,8 @@ interface ButtonAction {
   script?: string;           // Shell command to execute
   scriptFn?: (text: string, peerId: number) => string | null;  // Dynamic script built from user message + peerId
   imageFn?: (text: string) => string | null;  // Returns image generation prompt for Pollinations.ai
+  ttsFn?: (text: string) => string | null;    // Returns text to synthesize via ElevenLabs TTS
+  postFn?: (text: string) => string | null;   // Returns topic for VK post generation via LLM
   persona?: string;          // Persona file to load (for LLM modes)
   response?: string;         // Static response text
   keyboard?: string[][];     // Next keyboard buttons (text buttons)
@@ -556,6 +558,27 @@ const BUTTON_ACTIONS: Record<string, ButtonAction> = {
     },
   },
 
+  // === TTS — голосовое сообщение (ElevenLabs) ===
+  "tts_generate": {
+    ttsFn: (text: string): string | null => {
+      // Strip the command word, return the text to speak
+      const cleaned = text
+        .replace(/^(озвучь|скажи голосом|прочитай вслух|сделай голосовое|запиши голосовое|создай голосовое)\s*/i, '')
+        .trim();
+      return cleaned.length > 2 ? cleaned : null;
+    },
+  },
+
+  // === Генератор постов для VK (Groq LLM) ===
+  "post_generate": {
+    postFn: (text: string): string | null => {
+      const topic = text
+        .replace(/^(напиши пост|сгенерируй пост|создай пост|придумай пост)\s*(о|про|на тему|для)?\s*/i, '')
+        .trim();
+      return topic.length > 2 ? topic : null;
+    },
+  },
+
   // =========================================================================
   // === 🧙 ВЕЛИКИЙ МУДРЕЦ — Multi-LLM consensus engine ====================
   // =========================================================================
@@ -788,6 +811,16 @@ const VOICE_INTENTS: VoiceIntent[] = [
   { contains: ["генерируй"],      any: ["картин", "изображен"],                  action: "image_generate" },
   { contains: ["сделай"],         any: ["картинку", "изображение", "рисунок"],   action: "image_generate" },
   { contains: ["картинку"],       any: ["хочу", "покажи", "нужна"],              action: "image_generate" },
+  // --- TTS / Voice (ElevenLabs) ---
+  { contains: ["озвучь"],         any: [],                                       action: "tts_generate" },
+  { contains: ["скажи голосом"],  any: [],                                       action: "tts_generate" },
+  { contains: ["прочитай вслух"], any: [],                                       action: "tts_generate" },
+  { contains: ["голосовое"],      any: ["сделай", "запиши", "создай"],           action: "tts_generate" },
+  // --- Post generation (Groq LLM) ---
+  { contains: ["напиши пост"],    any: [],                                       action: "post_generate" },
+  { contains: ["сгенерируй пост"],any: [],                                       action: "post_generate" },
+  { contains: ["создай пост"],    any: [],                                       action: "post_generate" },
+  { contains: ["придумай пост"],  any: [],                                       action: "post_generate" },
 ];
 
 function matchVoiceIntent(text: string): ButtonAction | null {
@@ -996,6 +1029,8 @@ export interface DispatchResult {
   personaFile?: string;    // If set, prepend persona to LLM context
   scriptResults?: string;  // Script outputs to prepend as context when passing to LLM
   imagePrompt?: string;    // If set, runtime generates image via Pollinations.ai
+  ttsText?: string;        // If set, runtime generates voice message via ElevenLabs
+  postTopic?: string;      // If set, runtime generates VK post text via Groq LLM
 }
 
 export interface IncomingDoc {
@@ -1183,6 +1218,16 @@ export async function dispatchButton(
     }
     log(`[dispatcher] image gen: "${prompt.slice(0, 60)}"`);
     return { handled: true, imagePrompt: prompt };
+  }
+
+  // TTS generation (ElevenLabs) — FROZEN: upload flow not verified
+  if (action.ttsFn) {
+    return { handled: true, text: "🔒 Голосовые сообщения пока в разработке." };
+  }
+
+  // Post generation (Groq LLM) — FROZEN: GROQ_API_KEY not configured
+  if (action.postFn) {
+    return { handled: true, text: "🔒 Генерация постов пока в разработке." };
   }
 
   // Execute script directly

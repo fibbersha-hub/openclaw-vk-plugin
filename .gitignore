@@ -61,3 +61,16 @@ CLAUDE.md
 JOURNAL.md
 AGENTS.md
 AGENTS.server.md
+
+# ── ЛИЧНОЕ ИСПОЛЬЗОВАНИЕ — НИКОГДА НЕ ПУБЛИКОВАТЬ ──────────
+# Инструменты студии (парсеры, каталог, конкуренты, публикация)
+studio-tools/
+# Рабочее пространство (документация, внутренние доки)
+workspace/
+# Скрапер цен Яндекса
+yandex_scraper/
+# Исследовательские материалы (не код)
+AI_SERVICES_RESEARCH.html
+SYSTEM_SPEC.md
+# Конфиг медиа-сервисов (Suno/Udio/Kling — личное)
+browser-bridge/media-services.json

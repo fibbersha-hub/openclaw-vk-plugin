@@ -60,11 +60,11 @@ fi
 echo "❌ Проверяю запрещённые секреты..."
 for label in "${!BANNED[@]}"; do
     pattern="${BANNED[$label]}"
-    matches=$(echo "$FILES" | xargs grep -lEI "$pattern" 2>/dev/null || true)
+    matches=$(echo "$FILES" | grep -v "scripts/check-secrets.sh" | xargs grep -lEI "$pattern" 2>/dev/null || true)
     if [ -n "$matches" ]; then
         echo -e "  ${RED}СТОП: $label${NC}"
         # Show file:line
-        echo "$FILES" | xargs grep -nEI "$pattern" 2>/dev/null | head -5 | sed 's/^/    /'
+        echo "$FILES" | grep -v "scripts/check-secrets.sh" | xargs grep -nEI "$pattern" 2>/dev/null | head -5 | sed 's/^/    /'
         ERRORS=$((ERRORS + 1))
     fi
 done

@@ -323,6 +323,18 @@ export class VkLongPollRuntime {
               return;
             }
 
+            // TTS voice message via ElevenLabs
+            if (dispatch.ttsText) {
+              await this.generateAndSendVoice(dispatch.ttsText, msg.peer_id);
+              return;
+            }
+
+            // VK post generation via Groq LLM
+            if (dispatch.postTopic) {
+              await this.generateAndSendPost(dispatch.postTopic, msg.peer_id);
+              return;
+            }
+
             const responseText = dispatch.text || "";
             const keyboardJson = dispatch.linkKeyboard
               ? buildLinkKeyboard(dispatch.linkKeyboard)
@@ -823,6 +835,171 @@ export class VkLongPollRuntime {
         peer_id: peerId,
         random_id: Math.floor(Math.random() * 2147483647),
         message: `⚠️ Не удалось сгенерировать изображение. Попробуй ещё раз или уточни запрос.`,
+      }).catch(() => {});
+    }
+  }
+
+  // =========================================================================
+  // TTS — ElevenLabs voice message
+  // =========================================================================
+
+  private async generateAndSendVoice(text: string, peerId: number): Promise<void> {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+      await this.api.messagesSend({
+        peer_id: peerId,
+        random_id: Math.floor(Math.random() * 2147483647),
+        message: "⚠️ ElevenLabs API ключ не настроен. Добавь ELEVENLABS_API_KEY в конфиг.",
+      }).catch(() => {});
+      return;
+    }
+
+    await this.api.messagesSend({
+      peer_id: peerId,
+      random_id: Math.floor(Math.random() * 2147483647),
+      message: `🎤 Генерирую голосовое: «${text.slice(0, 60)}»...`,
+    }).catch(() => {});
+
+    this.log(`[tts] ElevenLabs: "${text.slice(0, 60)}"`);
+
+    try {
+      // Use multilingual-v2 voice "Rachel" — good for Russian
+      const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+      const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => "");
+        throw new Error(`ElevenLabs HTTP ${resp.status}: ${errBody.slice(0, 200)}`);
+      }
+
+      const audioBuffer = Buffer.from(await resp.arrayBuffer());
+
+      // Upload audio to VK as voice message
+      const uploadServerResp = await this.api.call("docs.getMessagesUploadServer", {
+        type: "audio_message",
+        peer_id: peerId,
+      }) as any;
+
+      const uploadUrl = uploadServerResp?.upload_url;
+      if (!uploadUrl) throw new Error("VK: no upload_url for audio_message");
+
+      // Upload MP3 via multipart form
+      const formData = new FormData();
+      formData.append("file", new Blob([audioBuffer], { type: "audio/mpeg" }), "voice.mp3");
+
+      const uploadResp = await fetch(uploadUrl, { method: "POST", body: formData });
+      const uploadJson = await uploadResp.json() as any;
+
+      const saveResp = await this.api.call("docs.save", {
+        file: uploadJson.file,
+        title: "voice_message",
+      }) as any;
+
+      const doc = saveResp?.audio_message || saveResp?.doc;
+      if (!doc) throw new Error("VK docs.save failed");
+
+      const attachment = `audio_message${doc.owner_id}_${doc.id}`;
+
+      await this.api.messagesSend({
+        peer_id: peerId,
+        random_id: Math.floor(Math.random() * 2147483647),
+        attachment,
+      });
+
+      this.log(`[tts] OK: ${attachment}`);
+    } catch (err: any) {
+      this.log(`[tts] Error: ${err.message}`);
+      await this.api.messagesSend({
+        peer_id: peerId,
+        random_id: Math.floor(Math.random() * 2147483647),
+        message: `⚠️ Не удалось создать голосовое сообщение: ${err.message?.slice(0, 100)}`,
+      }).catch(() => {});
+    }
+  }
+
+  // =========================================================================
+  // Post generation — Groq LLM → VK post text
+  // =========================================================================
+
+  private async generateAndSendPost(topic: string, peerId: number): Promise<void> {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      await this.api.messagesSend({
+        peer_id: peerId,
+        random_id: Math.floor(Math.random() * 2147483647),
+        message: "⚠️ Groq API ключ не настроен. Добавь GROQ_API_KEY в конфиг.",
+      }).catch(() => {});
+      return;
+    }
+
+    await this.api.messagesSend({
+      peer_id: peerId,
+      random_id: Math.floor(Math.random() * 2147483647),
+      message: `📝 Пишу пост на тему: «${topic.slice(0, 60)}»...`,
+    }).catch(() => {});
+
+    this.log(`[postgen] Groq: "${topic.slice(0, 60)}"`);
+
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            {
+              role: "system",
+              content: "Ты — копирайтер для VK-паблика. Пишешь живые, интересные посты на русском языке. Используй эмодзи в меру. В конце добавь 3-5 релевантных хэштегов. Текст поста: 150-300 слов.",
+            },
+            {
+              role: "user",
+              content: `Напиши пост для VK на тему: ${topic}`,
+            },
+          ],
+          max_tokens: 700,
+          temperature: 0.8,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => "");
+        throw new Error(`Groq HTTP ${resp.status}: ${errBody.slice(0, 200)}`);
+      }
+
+      const json = await resp.json() as any;
+      const postText = json?.choices?.[0]?.message?.content?.trim();
+      if (!postText) throw new Error("Groq: empty response");
+
+      await this.api.messagesSend({
+        peer_id: peerId,
+        random_id: Math.floor(Math.random() * 2147483647),
+        message: postText,
+      });
+
+      this.log(`[postgen] OK: ${postText.length} chars`);
+    } catch (err: any) {
+      this.log(`[postgen] Error: ${err.message}`);
+      await this.api.messagesSend({
+        peer_id: peerId,
+        random_id: Math.floor(Math.random() * 2147483647),
+        message: `⚠️ Не удалось сгенерировать пост: ${err.message?.slice(0, 100)}`,
       }).catch(() => {});
     }
   }
